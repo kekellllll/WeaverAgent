@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="./static/image/MiroFish_logo_compressed.jpeg" alt="WeaverAgent Logo" width="75%"/>
+<img src="./static/image/weaveragent_logo.svg" alt="WeaverAgent Logo" width="75%"/>
 
 A GraphRAG-Powered Academic Knowledge Graph Analysis Engine
 </br>

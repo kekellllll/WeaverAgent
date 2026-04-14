@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="./static/image/MiroFish_logo_compressed.jpeg" alt="WeaverAgent Logo" width="75%"/>
+<img src="./static/image/weaveragent_logo.svg" alt="WeaverAgent Logo" width="75%"/>
 
 基于 GraphRAG 的学术知识图谱分析引擎
 </br>
@@ -150,4 +150,4 @@ docker compose up -d
 
 ## 📄 致谢
 
-**WeaverAgent 得到了盛大集团的战略支持和孵化！**
+**WeaverAgent 感谢graphiti和mirofish的开源！**

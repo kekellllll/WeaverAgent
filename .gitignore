@@ -60,4 +60,4 @@ backend/uploads/
 backend/rag_index/
 
 # Docker 数据
-data/
+data/graphiti/
