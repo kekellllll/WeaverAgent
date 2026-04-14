@@ -154,8 +154,13 @@
             <div class="tools-card-header">
               <div class="tools-card-avatar">R</div>
               <div class="tools-card-info">
-                <div class="tools-card-name">Report Agent - Chat</div>
-                <div class="tools-card-subtitle">报告生成智能体的快速对话版本，可调用 4 种专业工具，拥有MiroFish的完整记忆</div>
+                <div class="tools-card-name">
+                  Report Agent - Chat
+                  <span class="rag-badge" :class="ragStatusClass" :title="ragStatusText">
+                    <span class="rag-badge-dot"></span>RAG
+                  </span>
+                </div>
+                <div class="tools-card-subtitle">报告生成智能体的快速对话版本，可调用 4 种专业工具，基于完整知识图谱进行深度问答</div>
               </div>
               <button class="tools-card-toggle" @click="showToolsDetail = !showToolsDetail">
                 <svg :class="{ 'is-expanded': showToolsDetail }" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
@@ -173,7 +178,7 @@
                   </div>
                   <div class="tool-content">
                     <div class="tool-name">InsightForge 深度归因</div>
-                    <div class="tool-desc">对齐现实世界种子数据与模拟环境状态，结合Global/Local Memory机制，提供跨时空的深度归因分析</div>
+                    <div class="tool-desc">结合 Global/Local Memory 机制，基于知识图谱进行跨论文深度归因分析，追溯技术演进脉络与创新来源</div>
                   </div>
                 </div>
                 <div class="tool-item tool-blue">
@@ -185,7 +190,7 @@
                   </div>
                   <div class="tool-content">
                     <div class="tool-name">PanoramaSearch 全景追踪</div>
-                    <div class="tool-desc">基于图结构的广度遍历算法，重构事件传播路径，捕获全量信息流动的拓扑结构</div>
+                    <div class="tool-desc">基于图结构的广度遍历算法，重构知识传播路径，捕获实体间全量关联关系的拓扑结构</div>
                   </div>
                 </div>
                 <div class="tool-item tool-orange">
@@ -196,7 +201,7 @@
                   </div>
                   <div class="tool-content">
                     <div class="tool-name">QuickSearch 快速检索</div>
-                    <div class="tool-desc">基于 GraphRAG 的即时查询接口，优化索引效率，用于快速提取具体的节点属性与离散事实</div>
+                    <div class="tool-desc">基于 GraphRAG 的即时查询接口，优化索引效率，用于快速提取图谱中具体节点的属性、关系与离散事实</div>
                   </div>
                 </div>
                 <div class="tool-item tool-green">
@@ -209,7 +214,7 @@
                   </div>
                   <div class="tool-content">
                     <div class="tool-name">InterviewSubAgent 虚拟访谈</div>
-                    <div class="tool-desc">自主式访谈，能够并行与模拟世界中个体进行多轮对话，采集非结构化的观点数据与心理状态</div>
+                    <div class="tool-desc">基于知识图谱中的实体进行访谈，能够并行与图谱中的核心节点进行多轮对话，采集非结构化的关联观点与深层知识状态</div>
                   </div>
                 </div>
               </div>
@@ -413,11 +418,12 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { chatWithReport, getReport, getAgentLog } from '../api/report'
-import { interviewAgents, getSimulationProfilesRealtime } from '../api/simulation'
+import { getRagStatus } from '../api/rag'
+import service from '../api/index'
 
 const props = defineProps({
   reportId: String,
-  simulationId: String
+  projectId: String
 })
 
 const emit = defineEmits(['add-log', 'update-status'])
@@ -425,36 +431,116 @@ const emit = defineEmits(['add-log', 'update-status'])
 // State
 const activeTab = ref('chat')
 const chatTarget = ref('report_agent')
-const showAgentDropdown = ref(false)
-const selectedAgent = ref(null)
-const selectedAgentIndex = ref(null)
-const showFullProfile = ref(true)
-const showToolsDetail = ref(true)
 
 // Chat State
 const chatInput = ref('')
 const chatHistory = ref([])
-const chatHistoryCache = ref({}) // 缓存所有对话记录: { 'report_agent': [], 'agent_0': [], 'agent_1': [], ... }
+const chatHistoryCache = ref({}) // 缓存所有对话记录: { 'report_agent': [], 'agent_0': [], ... }
 const isSending = ref(false)
 const chatMessages = ref(null)
 const chatInputRef = ref(null)
-
-// Survey State
-const selectedAgents = ref(new Set())
-const surveyQuestion = ref('')
-const surveyResults = ref([])
-const isSurveying = ref(false)
 
 // Report Data
 const reportOutline = ref(null)
 const generatedSections = ref({})
 const collapsedSections = ref(new Set())
 const currentSectionIndex = ref(null)
+
+// Profiles / Agent State
 const profiles = ref([])
+const selectedAgent = ref(null)
+const selectedAgentIndex = ref(null)
+const selectedAgents = ref(new Set())
+const showAgentDropdown = ref(false)
+const showFullProfile = ref(false)
+const showToolsDetail = ref(true)
+
+// Survey State
+const surveyQuestion = ref('')
+const surveyResults = ref([])
+const isSurveying = ref(false)
+
+// RAG Index State
+const ragChunkCount = ref(0)   // 0 = 未索引; >0 = 已就绪
+
+const ragStatusClass = computed(() => ragChunkCount.value > 0 ? 'status-ready' : 'status-empty')
+const ragStatusText = computed(() => {
+  if (ragChunkCount.value > 0) return `已索引 ${ragChunkCount.value} 个段落，两阶段检索已就绪`
+  return '向量索引尚未建立（上传文件并构建图谱后自动生成）'
+})
+
+const fetchRagStatus = async () => {
+  try {
+    const res = await getRagStatus()
+    if (res.data?.status === 'ready') {
+      ragChunkCount.value = res.data.total_chunks || 0
+    }
+  } catch (_) { /* 静默失败 */ }
+}
+
+// 加载 Agent Profiles（需要项目 ID，纯图谱场景下为空）
+const fetchProfiles = async () => {
+  const projId = props.projectId
+  if (!projId) return
+  try {
+    const res = await service.get(`/api/project/${projId}/profiles`)
+    if (res.success && res.data?.profiles) {
+      profiles.value = res.data.profiles
+    }
+  } catch (_) { /* 无项目时静默失败 */ }
+}
+
+// Interview API
+const interviewAgents = (data) => {
+  return service.post('/api/project/interview/batch', data)
+}
 
 // Helper Methods
 const isSectionCompleted = (sectionIndex) => {
   return !!generatedSections.value[sectionIndex]
+}
+
+// 全选/清空
+const selectAllAgents = () => {
+  selectedAgents.value = new Set(profiles.value.map((_, i) => i))
+}
+const clearAgentSelection = () => {
+  selectedAgents.value = new Set()
+}
+const toggleAgentSelection = (idx) => {
+  const next = new Set(selectedAgents.value)
+  if (next.has(idx)) next.delete(idx)
+  else next.add(idx)
+  selectedAgents.value = next
+}
+
+// Survey Submit
+const submitSurvey = async () => {
+  if (selectedAgents.value.size === 0 || !surveyQuestion.value.trim()) return
+  isSurveying.value = true
+  try {
+    const interviews = Array.from(selectedAgents.value).map(idx => ({
+      agent_id: idx,
+      prompt: surveyQuestion.value.trim()
+    }))
+    const res = await interviewAgents({
+      project_id: props.projectId,
+      interviews
+    })
+    if (res.success && res.data) {
+      const resultsDict = res.data.result?.results || {}
+      surveyResults.value = Object.values(resultsDict).map(r => ({
+        agent_name: r.agent_name || `Agent ${r.agent_id}`,
+        profession: '',
+        question: surveyQuestion.value,
+        answer: r.response || r.answer || '无回复'
+      }))
+    }
+  } catch (err) {
+    addLog(`问卷发送失败: ${err.message}`)
+  } finally {
+    isSurveying.value = false
+  }
 }
 
 // Refs
@@ -689,7 +775,7 @@ const sendToReportAgent = async (message) => {
     }))
   
   const res = await chatWithReport({
-    simulation_id: props.simulationId,
+    report_id: props.reportId,
     message: message,
     chat_history: historyForApi
   })
@@ -725,7 +811,7 @@ const sendToAgent = async (message) => {
   }
   
   const res = await interviewAgents({
-    simulation_id: props.simulationId,
+    project_id: props.projectId,
     interviews: [{
       agent_id: selectedAgentIndex.value,
       prompt: prompt
@@ -778,107 +864,13 @@ const scrollToBottom = () => {
   })
 }
 
-// Survey Methods
-const toggleAgentSelection = (idx) => {
-  const newSet = new Set(selectedAgents.value)
-  if (newSet.has(idx)) {
-    newSet.delete(idx)
-  } else {
-    newSet.add(idx)
-  }
-  selectedAgents.value = newSet
-}
-
-const selectAllAgents = () => {
-  const newSet = new Set()
-  profiles.value.forEach((_, idx) => newSet.add(idx))
-  selectedAgents.value = newSet
-}
-
-const clearAgentSelection = () => {
-  selectedAgents.value = new Set()
-}
-
-const submitSurvey = async () => {
-  if (selectedAgents.value.size === 0 || !surveyQuestion.value.trim()) return
-  
-  isSurveying.value = true
-  addLog(`发送问卷给 ${selectedAgents.value.size} 个对象...`)
-  
-  try {
-    const interviews = Array.from(selectedAgents.value).map(idx => ({
-      agent_id: idx,
-      prompt: surveyQuestion.value.trim()
-    }))
-    
-    const res = await interviewAgents({
-      simulation_id: props.simulationId,
-      interviews: interviews
-    })
-    
-    if (res.success && res.data) {
-      // 正确的数据路径: res.data.result.results 是一个对象字典
-      // 格式: {"twitter_0": {...}, "reddit_0": {...}, "twitter_1": {...}, ...}
-      const resultData = res.data.result || res.data
-      const resultsDict = resultData.results || resultData
-      
-      // 将对象字典转换为数组格式
-      const surveyResultsList = []
-      
-      for (const interview of interviews) {
-        const agentIdx = interview.agent_id
-        const agent = profiles.value[agentIdx]
-        
-        // 优先使用 reddit 平台回复，其次 twitter
-        let responseContent = '无响应'
-        
-        if (typeof resultsDict === 'object' && !Array.isArray(resultsDict)) {
-          const redditKey = `reddit_${agentIdx}`
-          const twitterKey = `twitter_${agentIdx}`
-          const agentResult = resultsDict[redditKey] || resultsDict[twitterKey]
-          if (agentResult) {
-            responseContent = agentResult.response || agentResult.answer || '无响应'
-          }
-        } else if (Array.isArray(resultsDict)) {
-          // 兼容数组格式
-          const matchedResult = resultsDict.find(r => r.agent_id === agentIdx)
-          if (matchedResult) {
-            responseContent = matchedResult.response || matchedResult.answer || '无响应'
-          }
-        }
-        
-        surveyResultsList.push({
-          agent_id: agentIdx,
-          agent_name: agent?.username || `Agent ${agentIdx}`,
-          profession: agent?.profession,
-          question: surveyQuestion.value.trim(),
-          answer: responseContent
-        })
-      }
-      
-      surveyResults.value = surveyResultsList
-      addLog(`收到 ${surveyResults.value.length} 条回复`)
-    } else {
-      throw new Error(res.error || '请求失败')
-    }
-  } catch (err) {
-    addLog(`问卷发送失败: ${err.message}`)
-  } finally {
-    isSurveying.value = false
-  }
-}
-
 // Load Report Data
 const loadReportData = async () => {
   if (!props.reportId) return
-  
   try {
     addLog(`加载报告数据: ${props.reportId}`)
-    
-    // Get report info
     const reportRes = await getReport(props.reportId)
     if (reportRes.success && reportRes.data) {
-      // Load agent logs to get report outline and sections
       await loadAgentLogs()
     }
   } catch (err) {
@@ -888,22 +880,18 @@ const loadReportData = async () => {
 
 const loadAgentLogs = async () => {
   if (!props.reportId) return
-  
   try {
     const res = await getAgentLog(props.reportId, 0)
     if (res.success && res.data) {
       const logs = res.data.logs || []
-      
       logs.forEach(log => {
         if (log.action === 'planning_complete' && log.details?.outline) {
           reportOutline.value = log.details.outline
         }
-        
         if (log.action === 'section_complete' && log.section_index < 100 && log.details?.content) {
           generatedSections.value[log.section_index] = log.details.content
         }
       })
-      
       addLog('报告数据加载完成')
     }
   } catch (err) {
@@ -911,38 +899,12 @@ const loadAgentLogs = async () => {
   }
 }
 
-const loadProfiles = async () => {
-  if (!props.simulationId) return
-  
-  try {
-    const res = await getSimulationProfilesRealtime(props.simulationId, 'reddit')
-    if (res.success && res.data) {
-      profiles.value = res.data.profiles || []
-      addLog(`加载了 ${profiles.value.length} 个模拟个体`)
-    }
-  } catch (err) {
-    addLog(`加载模拟个体失败: ${err.message}`)
-  }
-}
-
-// Click outside to close dropdown
-const handleClickOutside = (e) => {
-  const dropdown = document.querySelector('.agent-dropdown')
-  if (dropdown && !dropdown.contains(e.target)) {
-    showAgentDropdown.value = false
-  }
-}
-
 // Lifecycle
 onMounted(() => {
   addLog('Step5 深度互动初始化')
   loadReportData()
-  loadProfiles()
-  document.addEventListener('click', handleClickOutside)
-})
-
-onUnmounted(() => {
-  document.removeEventListener('click', handleClickOutside)
+  fetchRagStatus()
+  fetchProfiles()
 })
 
 watch(() => props.reportId, (newId) => {
@@ -951,11 +913,11 @@ watch(() => props.reportId, (newId) => {
   }
 }, { immediate: true })
 
-watch(() => props.simulationId, (newId) => {
+watch(() => props.projectId, (newId) => {
   if (newId) {
-    loadProfiles()
+    fetchProfiles()
   }
-}, { immediate: true })
+})
 </script>
 
 <style scoped>
@@ -1633,6 +1595,37 @@ watch(() => props.simulationId, (newId) => {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+/* RAG 状态徽章（嵌在工具卡标题旁） */
+.rag-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 500;
+  vertical-align: middle;
+  border: 1px solid transparent;
+  cursor: default;
+}
+.rag-badge.status-empty {
+  background: #F3F4F6;
+  color: #9CA3AF;
+  border-color: #E5E7EB;
+}
+.rag-badge.status-ready {
+  background: #ECFDF5;
+  color: #059669;
+  border-color: #A7F3D0;
+}
+.rag-badge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 /* Agent Profile Card */

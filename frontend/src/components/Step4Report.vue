@@ -166,12 +166,12 @@
                   <!-- Report Start -->
                   <template v-if="log.action === 'report_start'">
                     <div class="info-row">
-                      <span class="info-key">Simulation</span>
-                      <span class="info-val mono">{{ log.details?.simulation_id }}</span>
+                      <span class="info-key">Project</span>
+                      <span class="info-val mono">{{ log.details?.project_id }}</span>
                     </div>
-                    <div class="info-row" v-if="log.details?.simulation_requirement">
+                    <div class="info-row" v-if="log.details?.analysis_requirement">
                       <span class="info-key">Requirement</span>
-                      <span class="info-val">{{ log.details.simulation_requirement }}</span>
+                      <span class="info-val">{{ log.details.analysis_requirement }}</span>
                     </div>
                   </template>
 
@@ -372,17 +372,32 @@
           </div>
         </div>
       </div>
-    </div>
 
-    <!-- Bottom Console Logs -->
-    <div class="console-logs">
-      <div class="log-header">
-        <span class="log-title">CONSOLE OUTPUT</span>
-        <span class="log-id">{{ reportId || 'NO_REPORT' }}</span>
+      <!-- 始终可见的 Step5 入口按钮 -->
+      <div class="step5-entry">
+        <button
+          class="step5-btn"
+          :class="{ 'step5-btn--done': isComplete, 'step5-btn--skip': !isComplete }"
+          @click="goToInteraction"
+        >
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+            <polyline points="12 5 19 12 12 19"></polyline>
+          </svg>
+          <span>{{ isComplete ? '进入深度互动 →' : '跳过，进入 Step 5' }}</span>
+        </button>
       </div>
-      <div class="log-content" ref="logContent">
-        <div class="log-line" v-for="(log, idx) in consoleLogs" :key="idx">
-          <span class="log-msg" :class="getLogLevelClass(log)">{{ log }}</span>
+
+      <!-- Bottom Console Logs (inside right-panel) -->
+      <div class="console-logs">
+        <div class="log-header">
+          <span class="log-title">CONSOLE OUTPUT</span>
+          <span class="log-id">{{ reportId || 'NO_REPORT' }}</span>
+        </div>
+        <div class="log-content" ref="logContent">
+          <div class="log-line" v-for="(log, idx) in consoleLogs" :key="idx">
+            <span class="log-msg" :class="getLogLevelClass(log)">{{ log }}</span>
+          </div>
         </div>
       </div>
     </div>
@@ -391,24 +406,19 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, nextTick, h, reactive } from 'vue'
-import { useRouter } from 'vue-router'
 import { getAgentLog, getConsoleLog } from '../api/report'
-
-const router = useRouter()
 
 const props = defineProps({
   reportId: String,
-  simulationId: String,
+  projectId: String,
   systemLogs: Array
 })
 
-const emit = defineEmits(['add-log', 'update-status'])
+const emit = defineEmits(['add-log', 'update-status', 'next-step'])
 
 // Navigation
 const goToInteraction = () => {
-  if (props.reportId) {
-    router.push({ name: 'Interaction', params: { reportId: props.reportId } })
-  }
+  emit('next-step')
 }
 
 // State
@@ -542,22 +552,22 @@ const getToolIcon = (toolName) => {
 const parseInsightForge = (text) => {
   const result = {
     query: '',
-    simulationRequirement: '',
+    analysisRequirement: '',
     stats: { facts: 0, entities: 0, relationships: 0 },
     subQueries: [],
     facts: [],
     entities: [],
     relations: []
   }
-  
+
   try {
     // 提取分析问题
     const queryMatch = text.match(/分析问题:\s*(.+?)(?:\n|$)/)
     if (queryMatch) result.query = queryMatch[1].trim()
-    
+
     // 提取预测场景
     const reqMatch = text.match(/预测场景:\s*(.+?)(?:\n|$)/)
-    if (reqMatch) result.simulationRequirement = reqMatch[1].trim()
+    if (reqMatch) result.analysisRequirement = reqMatch[1].trim()
     
     // 提取统计数据 - 匹配"相关预测事实: X条"格式
     const factMatch = text.match(/相关预测事实:\s*(\d+)/)
@@ -1002,9 +1012,9 @@ const InsightDisplay = {
           ])
         ]),
         props.result.query && h('div', { class: 'header-topic' }, props.result.query),
-        props.result.simulationRequirement && h('div', { class: 'header-scenario' }, [
+        props.result.analysisRequirement && h('div', { class: 'header-scenario' }, [
           h('span', { class: 'scenario-label' }, '预测场景: '),
-          h('span', { class: 'scenario-text' }, props.result.simulationRequirement)
+          h('span', { class: 'scenario-text' }, props.result.analysisRequirement)
         ])
       ]),
       
@@ -2664,7 +2674,7 @@ watch(() => props.reportId, (newId) => {
 .right-panel {
   flex: 1;
   background: #FFFFFF;
-  overflow-y: auto;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
 
@@ -2895,6 +2905,7 @@ watch(() => props.reportId, (newId) => {
 .workflow-timeline {
   padding: 14px 20px 24px;
   flex: 1;
+  overflow-y: auto;
 }
 
 .timeline-item {
@@ -5105,6 +5116,48 @@ watch(() => props.reportId, (newId) => {
   font-family: 'JetBrains Mono', monospace;
   border-top: 1px solid #222;
   flex-shrink: 0;
+}
+
+/* Step5 入口按钮 */
+.step5-entry {
+  flex-shrink: 0;
+  padding: 10px 16px;
+  background: #FAFAFA;
+  border-top: 1px solid #E5E7EB;
+}
+
+.step5-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 11px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.step5-btn--done {
+  background: #1F2937;
+  color: #FFFFFF;
+}
+.step5-btn--done:hover {
+  background: #374151;
+}
+
+.step5-btn--skip {
+  background: transparent;
+  color: #6B7280;
+  border: 1px solid #D1D5DB;
+}
+.step5-btn--skip:hover {
+  background: #F3F4F6;
+  color: #374151;
+  border-color: #9CA3AF;
 }
 
 .log-header {

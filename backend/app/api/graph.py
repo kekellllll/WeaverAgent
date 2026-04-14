@@ -19,7 +19,7 @@ from ..models.task import TaskManager, TaskStatus
 from ..models.project import ProjectManager, ProjectStatus
 
 # 获取日志器
-logger = get_logger('mirofish.api')
+logger = get_logger('weaveragent.api')
 
 
 def allowed_file(filename: str) -> bool:
@@ -127,7 +127,7 @@ def generate_ontology():
     
     参数：
         files: 上传的文件（PDF/MD/TXT），可多个
-        simulation_requirement: 模拟需求描述（必填）
+        analysis_requirement: 分析需求描述（必填）
         project_name: 项目名称（可选）
         additional_context: 额外说明（可选）
         
@@ -149,18 +149,18 @@ def generate_ontology():
     try:
         logger.info("=== 开始生成本体定义 ===")
         
-        # 获取参数
-        simulation_requirement = request.form.get('simulation_requirement', '')
+        # 获取参数 (兼容旧字段名 simulation_requirement)
+        analysis_requirement = request.form.get('analysis_requirement', '') or request.form.get('simulation_requirement', '')
         project_name = request.form.get('project_name', 'Unnamed Project')
         additional_context = request.form.get('additional_context', '')
-        
+
         logger.debug(f"项目名称: {project_name}")
-        logger.debug(f"模拟需求: {simulation_requirement[:100]}...")
-        
-        if not simulation_requirement:
+        logger.debug(f"分析需求: {analysis_requirement[:100]}...")
+
+        if not analysis_requirement:
             return jsonify({
                 "success": False,
-                "error": "请提供模拟需求描述 (simulation_requirement)"
+                "error": "请提供分析需求描述 (analysis_requirement)"
             }), 400
         
         # 获取上传的文件
@@ -173,7 +173,7 @@ def generate_ontology():
         
         # 创建项目
         project = ProjectManager.create_project(name=project_name)
-        project.simulation_requirement = simulation_requirement
+        project.analysis_requirement = analysis_requirement
         logger.info(f"创建项目: {project.project_id}")
         
         # 保存文件并提取文本
@@ -216,7 +216,7 @@ def generate_ontology():
         generator = OntologyGenerator()
         ontology = generator.generate(
             document_texts=document_texts,
-            simulation_requirement=simulation_requirement,
+            analysis_requirement=analysis_requirement,
             additional_context=additional_context if additional_context else None
         )
         
@@ -336,7 +336,7 @@ def build_graph():
             project.error = None
         
         # 获取配置
-        graph_name = data.get('graph_name', project.name or 'MiroFish Graph')
+        graph_name = data.get('graph_name', project.name or 'WeaverAgent Graph')
         chunk_size = data.get('chunk_size', project.chunk_size or Config.DEFAULT_CHUNK_SIZE)
         chunk_overlap = data.get('chunk_overlap', project.chunk_overlap or Config.DEFAULT_CHUNK_OVERLAP)
         
@@ -372,7 +372,7 @@ def build_graph():
         
         # 启动后台任务
         def build_task():
-            build_logger = get_logger('mirofish.build')
+            build_logger = get_logger('weaveragent.build')
             try:
                 build_logger.info(f"[{task_id}] 开始构建图谱...")
                 task_manager.update_task(
@@ -600,15 +600,223 @@ def delete_graph(graph_id: str):
                 "success": False,
                 "error": "ZEP_API_KEY未配置"
             }), 500
-        
+
         builder = GraphBuilderService(api_key=Config.ZEP_API_KEY)
         builder.delete_graph(graph_id)
-        
+
         return jsonify({
             "success": True,
             "message": f"图谱已删除: {graph_id}"
         })
-        
+
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+
+# ============== 接口：追加文献到已有图谱 ==============
+
+@graph_bp.route('/project/<project_id>/append-docs', methods=['POST'])
+def append_documents(project_id: str):
+    """
+    向已构建完成的图谱追加新文献
+
+    请求方式：multipart/form-data
+
+    参数：
+        files: 新增文献文件（PDF/MD/TXT），可多个
+        chunk_size: 分块大小（可选，默认沿用项目配置）
+        chunk_overlap: 分块重叠（可选，默认沿用项目配置）
+
+    返回：
+        {
+            "success": true,
+            "data": {
+                "project_id": "proj_xxxx",
+                "task_id": "task_xxxx",
+                "message": "文献追加任务已启动"
+            }
+        }
+    """
+    try:
+        logger.info(f"=== 开始追加文献: project_id={project_id} ===")
+
+        # 检查配置
+        if not Config.ZEP_API_KEY:
+            return jsonify({"success": False, "error": "ZEP_API_KEY未配置"}), 500
+
+        # 获取项目
+        project = ProjectManager.get_project(project_id)
+        if not project:
+            return jsonify({"success": False, "error": f"项目不存在: {project_id}"}), 404
+
+        if not project.graph_id:
+            return jsonify({
+                "success": False,
+                "error": "该项目尚未构建图谱，请先完成图谱构建再追加文献"
+            }), 400
+
+        if project.status == ProjectStatus.GRAPH_BUILDING:
+            return jsonify({
+                "success": False,
+                "error": "图谱正在构建中，请等待构建完成后再追加文献"
+            }), 400
+
+        # 获取上传文件
+        uploaded_files = request.files.getlist('files')
+        if not uploaded_files or all(not f.filename for f in uploaded_files):
+            return jsonify({"success": False, "error": "请至少上传一个文献文件"}), 400
+
+        # 获取分块参数
+        chunk_size = request.form.get('chunk_size', type=int) or project.chunk_size or Config.DEFAULT_CHUNK_SIZE
+        chunk_overlap = request.form.get('chunk_overlap', type=int) or project.chunk_overlap or Config.DEFAULT_CHUNK_OVERLAP
+
+        # 保存新文件并提取文本
+        new_texts = []
+        new_file_infos = []
+
+        for file in uploaded_files:
+            if file and file.filename and allowed_file(file.filename):
+                file_info = ProjectManager.save_file_to_project(
+                    project.project_id,
+                    file,
+                    file.filename
+                )
+                text = FileParser.extract_text(file_info["path"])
+                text = TextProcessor.preprocess_text(text)
+                if text.strip():
+                    new_texts.append(text)
+                    new_file_infos.append({
+                        "filename": file_info["original_filename"],
+                        "size": file_info["size"]
+                    })
+                    logger.info(f"新文献提取成功: {file_info['original_filename']}, {len(text)} 字符")
+
+        if not new_texts:
+            return jsonify({
+                "success": False,
+                "error": "没有成功处理任何新文献，请检查文件格式"
+            }), 400
+
+        combined_new_text = "\n\n".join(new_texts)
+        graph_id = project.graph_id
+
+        # 创建追加任务
+        task_manager = TaskManager()
+        task_id = task_manager.create_task(f"追加文献到图谱: {project.name}")
+        logger.info(f"创建追加任务: task_id={task_id}")
+
+        # 立即更新项目文件列表和状态
+        project.files.extend(new_file_infos)
+        project.status = ProjectStatus.GRAPH_BUILDING
+        project.graph_build_task_id = task_id
+        project.error = None
+        ProjectManager.save_project(project)
+
+        def append_task():
+            append_logger = get_logger('weaveragent.append')
+            try:
+                task_manager.update_task(
+                    task_id,
+                    status=TaskStatus.PROCESSING,
+                    message="初始化追加服务..."
+                )
+
+                builder = GraphBuilderService(api_key=Config.ZEP_API_KEY)
+
+                task_manager.update_task(task_id, message="文本分块中...", progress=5)
+                chunks = TextProcessor.split_text(
+                    combined_new_text,
+                    chunk_size=chunk_size,
+                    overlap=chunk_overlap
+                )
+                total_chunks = len(chunks)
+                append_logger.info(f"[{task_id}] 新文本分为 {total_chunks} 块")
+
+                def add_progress_callback(msg, progress_ratio):
+                    progress = 10 + int(progress_ratio * 50)
+                    task_manager.update_task(task_id, message=msg, progress=progress)
+
+                task_manager.update_task(
+                    task_id,
+                    message=f"开始追加 {total_chunks} 个文本块...",
+                    progress=10
+                )
+
+                episode_uuids = builder.add_text_batches(
+                    graph_id,
+                    chunks,
+                    batch_size=3,
+                    progress_callback=add_progress_callback
+                )
+
+                task_manager.update_task(task_id, message="等待Zep处理新数据...", progress=60)
+
+                def wait_progress_callback(msg, progress_ratio):
+                    progress = 60 + int(progress_ratio * 30)
+                    task_manager.update_task(task_id, message=msg, progress=progress)
+
+                builder._wait_for_episodes(episode_uuids, wait_progress_callback)
+
+                task_manager.update_task(task_id, message="获取图谱数据...", progress=95)
+                graph_data = builder.get_graph_data(graph_id)
+
+                project.status = ProjectStatus.GRAPH_COMPLETED
+                project.error = None
+                ProjectManager.save_project(project)
+
+                node_count = graph_data.get("node_count", 0)
+                edge_count = graph_data.get("edge_count", 0)
+                append_logger.info(
+                    f"[{task_id}] 文献追加完成: 节点={node_count}, 边={edge_count}"
+                )
+
+                task_manager.update_task(
+                    task_id,
+                    status=TaskStatus.COMPLETED,
+                    message="文献追加完成",
+                    progress=100,
+                    result={
+                        "project_id": project_id,
+                        "graph_id": graph_id,
+                        "new_chunks": total_chunks,
+                        "node_count": node_count,
+                        "edge_count": edge_count
+                    }
+                )
+
+            except Exception as e:
+                append_logger.error(f"[{task_id}] 文献追加失败: {str(e)}")
+                append_logger.debug(traceback.format_exc())
+
+                # 追加失败不影响已有图谱，恢复为已完成状态
+                project.status = ProjectStatus.GRAPH_COMPLETED
+                project.error = f"追加文献失败: {str(e)}"
+                ProjectManager.save_project(project)
+
+                task_manager.update_task(
+                    task_id,
+                    status=TaskStatus.FAILED,
+                    message=f"追加失败: {str(e)}",
+                    error=traceback.format_exc()
+                )
+
+        thread = threading.Thread(target=append_task, daemon=True)
+        thread.start()
+
+        return jsonify({
+            "success": True,
+            "data": {
+                "project_id": project_id,
+                "task_id": task_id,
+                "new_files": len(new_file_infos),
+                "message": "文献追加任务已启动，请通过 /api/graph/task/{task_id} 查询进度"
+            }
+        })
+
     except Exception as e:
         return jsonify({
             "success": False,

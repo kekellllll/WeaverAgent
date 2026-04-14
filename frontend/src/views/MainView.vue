@@ -3,7 +3,7 @@
     <!-- Header -->
     <header class="app-header">
       <div class="header-left">
-        <div class="brand" @click="router.push('/')">MIROFISH</div>
+        <div class="brand" @click="router.push('/')">WEAVERAGENT</div>
       </div>
       
       <div class="header-center">
@@ -59,7 +59,7 @@
           :systemLogs="systemLogs"
           @next-step="handleNextStep"
         />
-        <!-- Step 2: 环境搭建 -->
+        <!-- Step 2: 图谱配置 -->
         <Step2EnvSetup
           v-else-if="currentStep === 2"
           :projectData="projectData"
@@ -67,6 +67,32 @@
           :systemLogs="systemLogs"
           @go-back="handleGoBack"
           @next-step="handleNextStep"
+          @add-log="addLog"
+          @graph-updated="fetchGraphData"
+        />
+        <!-- Step 3: 图谱统计分析 -->
+        <Step3GraphAnalysis
+          v-else-if="currentStep === 3"
+          :graphData="graphData"
+          :projectData="projectData"
+          :loading="graphLoading"
+          @go-back="handleGoBack"
+          @next-step="handleNextStep"
+        />
+        <!-- Step 4: 报告生成 -->
+        <Step4Report
+          v-else-if="currentStep === 4"
+          :reportId="currentReportId"
+          :systemLogs="systemLogs"
+          @add-log="addLog"
+          @update-status="handleReportStatus"
+          @next-step="handleNextStep"
+        />
+        <!-- Step 5: 深度互动 -->
+        <Step5Interaction
+          v-else-if="currentStep === 5"
+          :reportId="currentReportId"
+          :projectId="null"
           @add-log="addLog"
         />
       </div>
@@ -80,7 +106,11 @@ import { useRoute, useRouter } from 'vue-router'
 import GraphPanel from '../components/GraphPanel.vue'
 import Step1GraphBuild from '../components/Step1GraphBuild.vue'
 import Step2EnvSetup from '../components/Step2EnvSetup.vue'
-import { generateOntology, getProject, buildGraph, getTaskStatus, getGraphData } from '../api/graph'
+import Step3GraphAnalysis from '../components/Step3GraphAnalysis.vue'
+import Step4Report from '../components/Step4Report.vue'
+import Step5Interaction from '../components/Step5Interaction.vue'
+import { generateOntology, getProject, buildGraph, getTaskStatus, getGraphData, resetProject } from '../api/graph'
+import { generateReportByProject } from '../api/report'
 import { getPendingUpload, clearPendingUpload } from '../store/pendingUpload'
 
 const route = useRoute()
@@ -90,8 +120,8 @@ const router = useRouter()
 const viewMode = ref('split') // graph | split | workbench
 
 // Step State
-const currentStep = ref(1) // 1: 图谱构建, 2: 环境搭建, 3: 开始模拟, 4: 报告生成, 5: 深度互动
-const stepNames = ['图谱构建', '环境搭建', '开始模拟', '报告生成', '深度互动']
+const currentStep = ref(1) // 1: 图谱构建, 2: 环境搭建, 3: 图谱分析, 4: 报告生成, 5: 深度互动
+const stepNames = ['图谱构建', '环境搭建', '图谱分析', '报告生成', '深度互动']
 
 // Data State
 const currentProjectId = ref(route.params.projectId)
@@ -104,6 +134,9 @@ const currentPhase = ref(-1) // -1: Upload, 0: Ontology, 1: Build, 2: Complete
 const ontologyProgress = ref(null)
 const buildProgress = ref(null)
 const systemLogs = ref([])
+
+// Report State
+const currentReportId = ref(null)
 
 // Polling timers
 let pollTimer = null
@@ -156,15 +189,30 @@ const toggleMaximize = (target) => {
   }
 }
 
-const handleNextStep = (params = {}) => {
+const handleNextStep = async (params = {}) => {
   if (currentStep.value < 5) {
+    // 从 Step 3（图谱分析）进入 Step 4（报告生成）时，先创建报告
+    if (currentStep.value === 3) {
+      try {
+        addLog('正在初始化报告生成...')
+        const projectId = currentProjectId.value
+        const res = await generateReportByProject(projectId)
+        const data = res?.data || res
+        currentReportId.value = data?.report_id || data?.reportId
+        addLog(`报告已创建，ID: ${currentReportId.value}`)
+      } catch (e) {
+        addLog(`创建报告失败: ${e.message || e}`)
+        console.error('Failed to create report:', e)
+      }
+    }
     currentStep.value++
     addLog(`进入 Step ${currentStep.value}: ${stepNames[currentStep.value - 1]}`)
-    
-    // 如果是从 Step 2 进入 Step 3，记录模拟轮数配置
-    if (currentStep.value === 3 && params.maxRounds) {
-      addLog(`自定义模拟轮数: ${params.maxRounds} 轮`)
-    }
+  }
+}
+
+const handleReportStatus = (statusData) => {
+  if (statusData?.reportId) {
+    currentReportId.value = statusData.reportId
   }
 }
 
@@ -202,7 +250,7 @@ const handleNewProject = async () => {
     
     const formData = new FormData()
     pending.files.forEach(f => formData.append('files', f))
-    formData.append('simulation_requirement', pending.simulationRequirement)
+    formData.append('analysis_requirement', pending.analysisRequirement)
     
     const res = await generateOntology(formData)
     if (res.success) {
@@ -238,10 +286,36 @@ const loadProject = async () => {
       
       if (res.data.status === 'ontology_generated' && !res.data.graph_id) {
         await startBuildGraph()
-      } else if (res.data.status === 'graph_building' && res.data.graph_build_task_id) {
-        currentPhase.value = 1
-        startPollingTask(res.data.graph_build_task_id)
-        startGraphPolling()
+      } else if (res.data.status === 'graph_building') {
+        // 验证 task 是否仍然有效（服务器重启后 task 会丢失）
+        let taskAlive = false
+        if (res.data.graph_build_task_id) {
+          try {
+            const taskRes = await getTaskStatus(res.data.graph_build_task_id)
+            taskAlive = taskRes && taskRes.data &&
+              (taskRes.data.status === 'pending' || taskRes.data.status === 'processing')
+          } catch {
+            // task 不存在或请求失败，视为中断
+            taskAlive = false
+          }
+        }
+        if (taskAlive) {
+          // Task 仍在运行，继续轮询
+          currentPhase.value = 1
+          startPollingTask(res.data.graph_build_task_id)
+          startGraphPolling()
+        } else {
+          // Task 已丢失/失败（如服务器重启），自动重置并重新构建
+          addLog('检测到构建任务已中断，正在重置并重新构建...')
+          try {
+            const resetRes = await resetProject(currentProjectId.value)
+            projectData.value = resetRes.data
+            await startBuildGraph()
+          } catch (resetErr) {
+            error.value = '项目重置失败，请刷新页面重试'
+            addLog(`项目重置失败: ${resetErr.message}`)
+          }
+        }
       } else if (res.data.status === 'graph_completed' && res.data.graph_id) {
         currentPhase.value = 2
         await loadGraph(res.data.graph_id)
@@ -529,9 +603,12 @@ onUnmounted(() => {
 
 .panel-wrapper {
   height: 100%;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
   transition: width 0.4s cubic-bezier(0.25, 0.8, 0.25, 1), opacity 0.3s ease, transform 0.3s ease;
   will-change: width, opacity, transform;
+  display: flex;
+  flex-direction: column;
 }
 
 .panel-wrapper.left {

@@ -29,7 +29,7 @@ from .zep_tools import (
     InterviewResult
 )
 
-logger = get_logger('mirofish.report_agent')
+logger = get_logger('weaveragent.report_agent')
 
 
 class ReportLogger:
@@ -352,8 +352,8 @@ class ReportConsoleLogger:
         
         # 添加到 report_agent 相关的 logger
         loggers_to_attach = [
-            'mirofish.report_agent',
-            'mirofish.zep_tools',
+            'weaveragent.report_agent',
+            'weaveragent.zep_tools',
         ]
         
         for logger_name in loggers_to_attach:
@@ -368,8 +368,8 @@ class ReportConsoleLogger:
         
         if self._file_handler:
             loggers_to_detach = [
-                'mirofish.report_agent',
-                'mirofish.zep_tools',
+                'weaveragent.report_agent',
+                'weaveragent.zep_tools',
             ]
             
             for logger_name in loggers_to_detach:
@@ -473,110 +473,110 @@ class Report:
 # ── 工具描述 ──
 
 TOOL_DESC_INSIGHT_FORGE = """\
-【深度洞察检索 - 强大的检索工具】
-这是我们强大的检索函数，专为深度分析设计。它会：
-1. 自动将你的问题分解为多个子问题
-2. 从多个维度检索模拟图谱中的信息
-3. 整合语义搜索、实体分析、关系链追踪的结果
-4. 返回最全面、最深度的检索内容
+【深度洞察检索 - 强大的学术检索工具】
+这是我们强大的检索函数，专为学术文献知识图谱深度分析设计。它会：
+1. 自动将你的问题分解为多个子问题（方法/数据集/指标/对比等维度）
+2. 从多个维度检索知识图谱中的文献证据
+3. 整合语义搜索、实体分析、引用关系链追踪的结果
+4. 返回最全面、最深度的文献证据
 
 【使用场景】
-- 需要深入分析某个话题
-- 需要了解事件的多个方面
-- 需要获取支撑报告章节的丰富素材
+- 需要深入分析某个研究话题（如某方法的性能、某数据集的使用情况）
+- 需要了解某项研究的多个方面（动机、方法、实验、结论）
+- 需要获取支撑报告章节的丰富文献素材
 
 【返回内容】
-- 相关事实原文（可直接引用）
-- 核心实体洞察
-- 关系链分析"""
+- 相关文献事实原文（可直接引用）
+- 核心实体洞察（Paper/Method/Dataset/Author等）
+- 引用关系链分析"""
 
 TOOL_DESC_PANORAMA_SEARCH = """\
-【广度搜索 - 获取全貌视图】
-这个工具用于获取模拟结果的完整全貌，特别适合了解事件演变过程。它会：
-1. 获取所有相关节点和关系
-2. 区分当前有效的事实和历史/过期的事实
-3. 帮助你了解舆情是如何演变的
+【广度搜索 - 获取知识图谱全貌视图】
+这个工具用于获取知识图谱的完整全貌，特别适合了解某一研究领域的整体面貌。它会：
+1. 获取所有相关节点（Paper/Method/Dataset/Author/Metric等）和关系
+2. 区分当前有效的图谱事实和历史/早期版本的记录
+3. 帮助你了解某个研究方向的知识结构和演变
 
 【使用场景】
-- 需要了解事件的完整发展脉络
-- 需要对比不同阶段的舆情变化
-- 需要获取全面的实体和关系信息
+- 需要了解某研究领域的完整技术脉络
+- 需要对比不同阶段的方法演变和性能变化
+- 需要获取全面的实体和关系信息（如某方法被哪些论文使用）
 
 【返回内容】
-- 当前有效事实（模拟最新结果）
-- 历史/过期事实（演变记录）
-- 所有涉及的实体"""
+- 当前有效图谱事实（最新研究状态）
+- 历史/版本事实（研究演变记录）
+- 所有涉及的实体及其关系"""
 
 TOOL_DESC_QUICK_SEARCH = """\
 【简单搜索 - 快速检索】
-轻量级的快速检索工具，适合简单、直接的信息查询。
+轻量级的快速检索工具，适合简单、直接的文献信息查询。
 
 【使用场景】
-- 需要快速查找某个具体信息
-- 需要验证某个事实
-- 简单的信息检索
+- 需要快速查找某个具体实体（如某篇论文的标题、某个数据集的规模）
+- 需要验证某个文献事实
+- 简单的关键词检索
 
 【返回内容】
-- 与查询最相关的事实列表"""
+- 与查询最相关的文献事实列表"""
 
-TOOL_DESC_INTERVIEW_AGENTS = """\
-【深度采访 - 真实Agent采访（双平台）】
-调用OASIS模拟环境的采访API，对正在运行的模拟Agent进行真实采访！
-这不是LLM模拟，而是调用真实的采访接口获取模拟Agent的原始回答。
-默认在Twitter和Reddit两个平台同时采访，获取更全面的观点。
+TOOL_DESC_DEEP_ENTITY_QUERY = """\
+【实体深度查询 - 按类型展开关联文献】
+针对特定实体类型（Paper/Method/Dataset/Author/Metric/Task等），
+从知识图谱中展开关联关系，获取多角度文献支撑。
 
 功能流程：
-1. 自动读取人设文件，了解所有模拟Agent
-2. 智能选择与采访主题最相关的Agent（如学生、媒体、官方等）
-3. 自动生成采访问题
-4. 调用 /api/simulation/interview/batch 接口在双平台进行真实采访
-5. 整合所有采访结果，提供多视角分析
+1. 按指定类型检索图谱中的所有相关节点
+2. 对每个节点做1-hop邻居扩展，收集所有关联边事实
+3. 整合结果，生成该类型实体的结构化全景分析
 
 【使用场景】
-- 需要从不同角色视角了解事件看法（学生怎么看？媒体怎么看？官方怎么说？）
-- 需要收集多方意见和立场
-- 需要获取模拟Agent的真实回答（来自OASIS模拟环境）
-- 想让报告更生动，包含"采访实录"
+- 需要了解图谱中所有Method（算法/模型）的全貌及其与论文的关联
+- 需要追踪特定论文引用了哪些Dataset
+- 需要查看某类指标Metric被哪些研究工作评测
+- 需要获取某位Author发表的所有相关论文
 
 【返回内容】
-- 被采访Agent的身份信息
-- 各Agent在Twitter和Reddit两个平台的采访回答
-- 关键引言（可直接引用）
-- 采访摘要和观点对比
-
-【重要】需要OASIS模拟环境正在运行才能使用此功能！"""
+- 该类型所有实体的摘要信息
+- 每个实体的关联关系链（如 PROPOSES / EVALUATES_ON / ACHIEVES）
+- 核心文献事实（可直接引用）"""
 
 # ── 大纲规划 prompt ──
 
 PLAN_SYSTEM_PROMPT = """\
-你是一个「未来预测报告」的撰写专家，拥有对模拟世界的「上帝视角」——你可以洞察模拟中每一位Agent的行为、言论和互动。
+你是一个「学术论文知识图谱分析报告」的撰写专家，拥有对知识图谱的全局视角——
+你可以洞察图谱中每一篇论文（Paper）、方法（Method）、数据集（Dataset）、作者（Author）、
+评测指标（Metric）之间的关系与引用网络。
 
 【核心理念】
-我们构建了一个模拟世界，并向其中注入了特定的「模拟需求」作为变量。模拟世界的演化结果，就是对未来可能发生情况的预测。你正在观察的不是"实验数据"，而是"未来的预演"。
+我们将学术论文通过LLM实体关系抽取，构建了一个领域知识图谱（存储于Zep Cloud + Neo4j）。
+图谱中的事实来自论文原文，是该研究领域中已发表的知识结构的真实映射。
+你正在观察的不是"预测数据"，而是"文献中记录的研究现状"。
 
 【你的任务】
-撰写一份「未来预测报告」，回答：
-1. 在我们设定的条件下，未来发生了什么？
-2. 各类Agent（人群）是如何反应和行动？
-3. 这个模拟揭示了哪些值得关注的未来趋势和风险？
+撰写一份「学术文献知识图谱分析报告」，回答：
+1. 在分析主题下，该领域研究了哪些核心问题？
+2. 主要方法（Method）和模型（Model）有哪些？各有何贡献？
+3. 使用了哪些数据集（Dataset）和评测指标（Metric）？
+4. 作者（Author）和机构之间有哪些合作关系？
+5. 该领域的研究演进趋势是什么？
 
 【报告定位】
-- ✅ 这是一份基于模拟的未来预测报告，揭示"如果这样，未来会怎样"
-- ✅ 聚焦于预测结果：事件走向、群体反应、涌现现象、潜在风险
-- ✅ 模拟世界中的Agent言行就是对未来人群行为的预测
-- ❌ 不是对现实世界现状的分析
-- ❌ 不是泛泛而谈的舆情综述
+- ✅ 这是一份基于学术论文知识图谱的文献分析报告
+- ✅ 聚焦于研究发现：技术方法、实验结果、学术贡献、研究趋势
+- ✅ 图谱中的事实（entity/relation）来自论文原文，是可信的文献证据
+- ❌ 不是对未来的预测，也不是对社会舆情的分析
+- ❌ 不是泛泛而谈的综述，需要基于图谱中的具体证据
 
 【章节数量限制】
 - 最少2个章节，最多5个章节
 - 不需要子章节，每个章节直接撰写完整内容
-- 内容要精炼，聚焦于核心预测发现
-- 章节结构由你根据预测结果自主设计
+- 内容要精炼，聚焦于核心研究发现
+- 章节结构由你根据知识图谱内容自主设计
 
 请输出JSON格式的报告大纲，格式如下：
 {
     "title": "报告标题",
-    "summary": "报告摘要（一句话概括核心预测发现）",
+    "summary": "报告摘要（一句话概括核心研究发现）",
     "sections": [
         {
             "title": "章节标题",
@@ -588,35 +588,36 @@ PLAN_SYSTEM_PROMPT = """\
 注意：sections数组最少2个，最多5个元素！"""
 
 PLAN_USER_PROMPT_TEMPLATE = """\
-【预测场景设定】
-我们向模拟世界注入的变量（模拟需求）：{simulation_requirement}
+【分析主题设定】
+我们需要分析的研究问题（分析主题）：{simulation_requirement}
 
-【模拟世界规模】
-- 参与模拟的实体数量: {total_nodes}
-- 实体间产生的关系数量: {total_edges}
+【知识图谱规模】
+- 图谱中的实体节点数量: {total_nodes}
+- 实体间的关系数量: {total_edges}
 - 实体类型分布: {entity_types}
-- 活跃Agent数量: {total_entities}
+- 活跃实体数量: {total_entities}
 
-【模拟预测到的部分未来事实样本】
+【图谱中部分相关文献事实样本】
 {related_facts_json}
 
-请以「上帝视角」审视这个未来预演：
-1. 在我们设定的条件下，未来呈现出了什么样的状态？
-2. 各类人群（Agent）是如何反应和行动的？
-3. 这个模拟揭示了哪些值得关注的未来趋势？
+请以「知识图谱全局视角」分析这些文献内容：
+1. 在分析主题下，该领域的核心研究方向是什么？
+2. 主要方法（Method）和模型各有何学术贡献？
+3. 常用数据集（Dataset）和评测指标（Metric）有哪些？
+4. 这些文献揭示了怎样的研究演进脉络？
 
-根据预测结果，设计最合适的报告章节结构。
+根据图谱内容，设计最合适的报告章节结构。
 
-【再次提醒】报告章节数量：最少2个，最多5个，内容要精炼聚焦于核心预测发现。"""
+【再次提醒】报告章节数量：最少2个，最多5个，内容要精炼聚焦于核心研究发现。"""
 
 # ── 章节生成 prompt ──
 
 SECTION_SYSTEM_PROMPT_TEMPLATE = """\
-你是一个「未来预测报告」的撰写专家，正在撰写报告的一个章节。
+你是一个「学术论文知识图谱分析报告」的撰写专家，正在撰写报告的一个章节。
 
 报告标题: {report_title}
 报告摘要: {report_summary}
-预测场景（模拟需求）: {simulation_requirement}
+分析主题（研究问题）: {simulation_requirement}
 
 当前要撰写的章节: {section_title}
 
@@ -624,43 +625,44 @@ SECTION_SYSTEM_PROMPT_TEMPLATE = """\
 【核心理念】
 ═══════════════════════════════════════════════════════════════
 
-模拟世界是对未来的预演。我们向模拟世界注入了特定条件（模拟需求），
-模拟中Agent的行为和互动，就是对未来人群行为的预测。
+知识图谱是学术论文的结构化映射。我们通过LLM对论文做实体关系抽取，
+再经Zep Cloud构建GraphRAG图谱，存储于Neo4j中。
+图谱中的事实（entity/relation/fact）来自真实的论文原文，是可信的文献证据。
 
 你的任务是：
-- 揭示在设定条件下，未来发生了什么
-- 预测各类人群（Agent）是如何反应和行动的
-- 发现值得关注的未来趋势、风险和机会
+- 从图谱中挖掘该章节主题相关的文献证据
+- 分析方法（Method）、数据集（Dataset）、指标（Metric）之间的关系
+- 展示该领域的研究贡献、技术演进和学术格局
 
-❌ 不要写成对现实世界现状的分析
-✅ 要聚焦于"未来会怎样"——模拟结果就是预测的未来
+❌ 不要写成对未来的预测，也不要写成社会舆情分析
+✅ 要聚焦于"文献记录了什么"——图谱事实就是研究现状的证据
 
 ═══════════════════════════════════════════════════════════════
 【最重要的规则 - 必须遵守】
 ═══════════════════════════════════════════════════════════════
 
-1. 【必须调用工具观察模拟世界】
-   - 你正在以「上帝视角」观察未来的预演
-   - 所有内容必须来自模拟世界中发生的事件和Agent言行
+1. 【必须调用工具检索知识图谱】
+   - 你正在以「全局视角」观察知识图谱
+   - 所有内容必须来自图谱中检索到的文献事实
    - 禁止使用你自己的知识来编写报告内容
-   - 每个章节至少调用3次工具（最多5次）来观察模拟的世界，它代表了未来
+   - 每个章节至少调用3次工具（最多5次）来检索图谱证据
 
-2. 【必须引用Agent的原始言行】
-   - Agent的发言和行为是对未来人群行为的预测
-   - 在报告中使用引用格式展示这些预测，例如：
-     > "某类人群会表示：原文内容..."
-   - 这些引用是模拟预测的核心证据
+2. 【必须引用文献原文】
+   - 图谱中的事实（fact）来自论文原文
+   - 在报告中使用引用格式展示这些文献证据，例如：
+     > "论文/方法名称 指出：原文内容..."
+   - 这些引用是文献分析的核心证据
 
 3. 【语言一致性 - 引用内容必须翻译为报告语言】
    - 工具返回的内容可能包含英文或中英文混杂的表述
-   - 如果模拟需求和材料原文是中文的，报告必须全部使用中文撰写
+   - 如果分析主题是中文的，报告必须全部使用中文撰写
    - 当你引用工具返回的英文或中英混杂内容时，必须将其翻译为流畅的中文后再写入报告
    - 翻译时保持原意不变，确保表述自然通顺
    - 这一规则同时适用于正文和引用块（> 格式）中的内容
 
-4. 【忠实呈现预测结果】
-   - 报告内容必须反映模拟世界中的代表未来的模拟结果
-   - 不要添加模拟中不存在的信息
+4. 【忠实呈现文献证据】
+   - 报告内容必须反映图谱中的真实文献事实
+   - 不要添加图谱中不存在的信息
    - 如果某方面信息不足，如实说明
 
 ═══════════════════════════════════════════════════════════════
@@ -676,26 +678,26 @@ SECTION_SYSTEM_PROMPT_TEMPLATE = """\
 
 【正确示例】
 ```
-本章节分析了事件的舆论传播态势。通过对模拟数据的深入分析，我们发现...
+本章节分析了该领域的核心方法及其在基准数据集上的表现。通过对知识图谱的深入检索，我们发现...
 
-**首发引爆阶段**
+**Transformer架构的主导地位**
 
-微博作为舆情的第一现场，承担了信息首发的核心功能：
+Transformer已成为NLP领域最广泛采用的基础架构，多篇论文在此基础上提出改进：
 
-> "微博贡献了68%的首发声量..."
+> "BERT通过双向预训练实现了11项NLP任务的新SOTA（Devlin et al., 2019）"
 
-**情绪放大阶段**
+**数据集覆盖情况**
 
-抖音平台进一步放大了事件影响力：
+图谱中记录了以下主流评测数据集的使用情况：
 
-- 视觉冲击力强
-- 情绪共鸣度高
+- GLUE: 被87%的论文用于语言理解评测
+- SQuAD: 主要用于机器阅读理解任务
 ```
 
 【错误示例】
 ```
 ## 执行摘要          ← 错误！不要添加任何标题
-### 一、首发阶段     ← 错误！不要用###分小节
+### 一、核心方法     ← 错误！不要用###分小节
 #### 1.1 详细分析   ← 错误！不要用####细分
 
 本章节分析了...
@@ -708,10 +710,10 @@ SECTION_SYSTEM_PROMPT_TEMPLATE = """\
 {tools_description}
 
 【工具使用建议 - 请混合使用不同工具，不要只用一种】
-- insight_forge: 深度洞察分析，自动分解问题并多维度检索事实和关系
-- panorama_search: 广角全景搜索，了解事件全貌、时间线和演变过程
-- quick_search: 快速验证某个具体信息点
-- interview_agents: 采访模拟Agent，获取不同角色的第一人称观点和真实反应
+- insight_forge: 深度洞察分析，自动分解问题并多维度检索文献事实和关系链
+- panorama_search: 广角全景搜索，了解研究全貌、技术脉络和演变过程
+- quick_search: 快速验证某个具体文献信息点
+- deep_entity_query: 按实体类型（Paper/Method/Dataset等）展开关联关系，获取该类型实体全景
 
 ═══════════════════════════════════════════════════════════════
 【工作流程】
@@ -738,8 +740,8 @@ SECTION_SYSTEM_PROMPT_TEMPLATE = """\
 【章节内容要求】
 ═══════════════════════════════════════════════════════════════
 
-1. 内容必须基于工具检索到的模拟数据
-2. 大量引用原文来展示模拟效果
+1. 内容必须基于工具检索到的图谱文献数据
+2. 大量引用原文来展示文献证据
 3. 使用Markdown格式（但禁止使用标题）：
    - 使用 **粗体文字** 标记重点（代替子标题）
    - 使用列表（-或1.2.3.）组织要点
@@ -750,16 +752,16 @@ SECTION_SYSTEM_PROMPT_TEMPLATE = """\
 
    ✅ 正确格式：
    ```
-   校方的回应被认为缺乏实质内容。
+   该方法在多个基准上取得了显著提升。
 
-   > "校方的应对模式在瞬息万变的社交媒体环境中显得僵化和迟缓。"
+   > "在SQuAD 2.0数据集上，该模型的F1分数达到89.7，超越了之前所有基线方法。"
 
-   这一评价反映了公众的普遍不满。
+   这一结果表明该方法在机器阅读理解任务上具有明显优势。
    ```
 
    ❌ 错误格式：
    ```
-   校方的回应被认为缺乏实质内容。> "校方的应对模式..." 这一评价反映了...
+   该方法取得显著提升。> "F1分数达到89.7..." 这一结果表明...
    ```
 5. 保持与其他章节的逻辑连贯性
 6. 【避免重复】仔细阅读下方已完成的章节内容，不要重复描述相同的信息
@@ -775,7 +777,7 @@ SECTION_USER_PROMPT_TEMPLATE = """\
 
 【重要提醒】
 1. 仔细阅读上方已完成的章节，避免重复相同的内容！
-2. 开始前必须先调用工具获取模拟数据
+2. 开始前必须先调用工具检索知识图谱数据
 3. 请混合使用不同工具，不要只用一种
 4. 报告内容必须来自检索结果，不要使用自己的知识
 
@@ -806,38 +808,38 @@ Observation（检索结果）:
 
 REACT_INSUFFICIENT_TOOLS_MSG = (
     "【注意】你只调用了{tool_calls_count}次工具，至少需要{min_tool_calls}次。"
-    "请再调用工具获取更多模拟数据，然后再输出 Final Answer。{unused_hint}"
+    "请再调用工具检索更多图谱数据，然后再输出 Final Answer。{unused_hint}"
 )
 
 REACT_INSUFFICIENT_TOOLS_MSG_ALT = (
     "当前只调用了 {tool_calls_count} 次工具，至少需要 {min_tool_calls} 次。"
-    "请调用工具获取模拟数据。{unused_hint}"
+    "请调用工具检索图谱数据。{unused_hint}"
 )
 
 REACT_TOOL_LIMIT_MSG = (
     "工具调用次数已达上限（{tool_calls_count}/{max_tool_calls}），不能再调用工具。"
-    '请立即基于已获取的信息，以 "Final Answer:" 开头输出章节内容。'
+    '请立即基于已获取的文献证据，以 "Final Answer:" 开头输出章节内容。'
 )
 
-REACT_UNUSED_TOOLS_HINT = "\n💡 你还没有使用过: {unused_list}，建议尝试不同工具获取多角度信息"
+REACT_UNUSED_TOOLS_HINT = "\n💡 你还没有使用过: {unused_list}，建议尝试不同工具获取多角度文献证据"
 
 REACT_FORCE_FINAL_MSG = "已达到工具调用限制，请直接输出 Final Answer: 并生成章节内容。"
 
 # ── Chat prompt ──
 
 CHAT_SYSTEM_PROMPT_TEMPLATE = """\
-你是一个简洁高效的模拟预测助手。
+你是一个简洁高效的学术文献分析助手。
 
 【背景】
-预测条件: {simulation_requirement}
+分析主题: {simulation_requirement}
 
-【已生成的分析报告】
+【已生成的知识图谱分析报告】
 {report_content}
 
 【规则】
 1. 优先基于上述报告内容回答问题
 2. 直接回答问题，避免冗长的思考论述
-3. 仅在报告内容不足以回答时，才调用工具检索更多数据
+3. 仅在报告内容不足以回答时，才调用工具检索图谱中更多文献数据
 4. 回答要简洁、清晰、有条理
 
 【可用工具】（仅在需要时使用，最多调用1-2次）
@@ -850,7 +852,7 @@ CHAT_SYSTEM_PROMPT_TEMPLATE = """\
 
 【回答风格】
 - 简洁直接，不要长篇大论
-- 使用 > 格式引用关键内容
+- 使用 > 格式引用关键文献内容
 - 优先给出结论，再解释原因"""
 
 CHAT_OBSERVATION_SUFFIX = "\n\n请简洁回答问题。"
@@ -942,12 +944,13 @@ class ReportAgent:
                     "limit": "返回结果数量（可选，默认10）"
                 }
             },
-            "interview_agents": {
-                "name": "interview_agents",
-                "description": TOOL_DESC_INTERVIEW_AGENTS,
+            "deep_entity_query": {
+                "name": "deep_entity_query",
+                "description": TOOL_DESC_DEEP_ENTITY_QUERY,
                 "parameters": {
-                    "interview_topic": "采访主题或需求描述（如：'了解学生对宿舍甲醛事件的看法'）",
-                    "max_agents": "最多采访的Agent数量（可选，默认5，最大10）"
+                    "entity_type": "要查询的实体类型（Paper/Method/Dataset/Author/Metric/Task/Innovation/Baseline）",
+                    "query": "额外过滤关键词（可选，留空表示获取该类型所有实体）",
+                    "max_entities": "最多展开的实体数量（可选，默认5）"
                 }
             }
         }
@@ -1004,18 +1007,21 @@ class ReportAgent:
                 )
                 return result.to_text()
             
-            elif tool_name == "interview_agents":
-                # 深度采访 - 调用真实的OASIS采访API获取模拟Agent的回答（双平台）
-                interview_topic = parameters.get("interview_topic", parameters.get("query", ""))
-                max_agents = parameters.get("max_agents", 5)
-                if isinstance(max_agents, str):
-                    max_agents = int(max_agents)
-                max_agents = min(max_agents, 10)
-                result = self.zep_tools.interview_agents(
-                    simulation_id=self.simulation_id,
-                    interview_requirement=interview_topic,
-                    simulation_requirement=self.simulation_requirement,
-                    max_agents=max_agents
+            elif tool_name in ("interview_agents", "deep_entity_query"):
+                # 实体深度查询 - 按类型展开关联文献
+                entity_type = parameters.get("entity_type", parameters.get("interview_topic", "Paper"))
+                query = parameters.get("query", parameters.get("max_agents", ""))
+                if isinstance(query, int):
+                    query = ""
+                max_entities = parameters.get("max_entities", 5)
+                if isinstance(max_entities, str):
+                    max_entities = int(max_entities)
+                max_entities = min(max_entities, 10)
+                result = self.zep_tools.deep_entity_query(
+                    graph_id=self.graph_id,
+                    entity_type=entity_type,
+                    query=str(query),
+                    max_entities=max_entities
                 )
                 return result.to_text()
             
@@ -1054,14 +1060,14 @@ class ReportAgent:
                 return json.dumps(result, ensure_ascii=False, indent=2)
             
             else:
-                return f"未知工具: {tool_name}。请使用以下工具之一: insight_forge, panorama_search, quick_search"
+                return f"未知工具: {tool_name}。请使用以下工具之一: insight_forge, panorama_search, quick_search, deep_entity_query"
                 
         except Exception as e:
             logger.error(f"工具执行失败: {tool_name}, 错误: {str(e)}")
             return f"工具执行失败: {str(e)}"
     
     # 合法的工具名称集合，用于裸 JSON 兜底解析时校验
-    VALID_TOOL_NAMES = {"insight_forge", "panorama_search", "quick_search", "interview_agents"}
+    VALID_TOOL_NAMES = {"insight_forge", "panorama_search", "quick_search", "deep_entity_query", "interview_agents"}
 
     def _parse_tool_calls(self, response: str) -> List[Dict[str, Any]]:
         """
@@ -1153,10 +1159,10 @@ class ReportAgent:
         if progress_callback:
             progress_callback("planning", 0, "正在分析模拟需求...")
         
-        # 首先获取模拟上下文
-        context = self.zep_tools.get_simulation_context(
+        # 首先获取分析上下文
+        context = self.zep_tools.get_analysis_context(
             graph_id=self.graph_id,
-            simulation_requirement=self.simulation_requirement
+            analysis_requirement=self.simulation_requirement
         )
         
         if progress_callback:
@@ -1208,12 +1214,12 @@ class ReportAgent:
             logger.error(f"大纲规划失败: {str(e)}")
             # 返回默认大纲（3个章节，作为fallback）
             return ReportOutline(
-                title="未来预测报告",
-                summary="基于模拟预测的未来趋势与风险分析",
+                title="学术文献知识图谱分析报告",
+                summary="基于知识图谱的学术文献综合分析",
                 sections=[
-                    ReportSection(title="预测场景与核心发现"),
-                    ReportSection(title="人群行为预测分析"),
-                    ReportSection(title="趋势展望与风险提示")
+                    ReportSection(title="核心研究方法与技术贡献"),
+                    ReportSection(title="数据集与评测指标分析"),
+                    ReportSection(title="研究趋势与未来展望")
                 ]
             )
     
@@ -1286,7 +1292,7 @@ class ReportAgent:
         min_tool_calls = 3  # 最少工具调用次数
         conflict_retries = 0  # 工具调用与Final Answer同时出现的连续冲突次数
         used_tools = set()  # 记录已调用过的工具名
-        all_tools = {"insight_forge", "panorama_search", "quick_search", "interview_agents"}
+        all_tools = {"insight_forge", "panorama_search", "quick_search", "deep_entity_query"}
 
         # 报告上下文，用于InsightForge的子问题生成
         report_context = f"章节标题: {section.title}\n模拟需求: {self.simulation_requirement}"

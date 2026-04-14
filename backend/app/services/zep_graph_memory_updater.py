@@ -17,7 +17,7 @@ from zep_cloud.client import Zep
 from ..config import Config
 from ..utils.logger import get_logger
 
-logger = get_logger('mirofish.zep_graph_memory_updater')
+logger = get_logger('weaveragent.zep_graph_memory_updater')
 
 
 @dataclass
@@ -481,46 +481,46 @@ class ZepGraphMemoryManager:
     _lock = threading.Lock()
     
     @classmethod
-    def create_updater(cls, simulation_id: str, graph_id: str) -> ZepGraphMemoryUpdater:
+    def create_updater(cls, project_id: str, graph_id: str) -> ZepGraphMemoryUpdater:
         """
-        为模拟创建图谱记忆更新器
-        
+        为项目创建图谱记忆更新器
+
         Args:
-            simulation_id: 模拟ID
+            project_id: 项目ID
             graph_id: Zep图谱ID
-            
+
         Returns:
             ZepGraphMemoryUpdater实例
         """
         with cls._lock:
             # 如果已存在，先停止旧的
-            if simulation_id in cls._updaters:
-                cls._updaters[simulation_id].stop()
-            
+            if project_id in cls._updaters:
+                cls._updaters[project_id].stop()
+
             updater = ZepGraphMemoryUpdater(graph_id)
             updater.start()
-            cls._updaters[simulation_id] = updater
-            
-            logger.info(f"创建图谱记忆更新器: simulation_id={simulation_id}, graph_id={graph_id}")
+            cls._updaters[project_id] = updater
+
+            logger.info(f"创建图谱记忆更新器: project_id={project_id}, graph_id={graph_id}")
             return updater
-    
+
     @classmethod
-    def get_updater(cls, simulation_id: str) -> Optional[ZepGraphMemoryUpdater]:
-        """获取模拟的更新器"""
-        return cls._updaters.get(simulation_id)
-    
+    def get_updater(cls, project_id: str) -> Optional[ZepGraphMemoryUpdater]:
+        """获取项目的更新器"""
+        return cls._updaters.get(project_id)
+
     @classmethod
-    def stop_updater(cls, simulation_id: str):
-        """停止并移除模拟的更新器"""
+    def stop_updater(cls, project_id: str):
+        """停止并移除项目的更新器"""
         with cls._lock:
-            if simulation_id in cls._updaters:
-                cls._updaters[simulation_id].stop()
-                del cls._updaters[simulation_id]
-                logger.info(f"已停止图谱记忆更新器: simulation_id={simulation_id}")
-    
+            if project_id in cls._updaters:
+                cls._updaters[project_id].stop()
+                del cls._updaters[project_id]
+                logger.info(f"已停止图谱记忆更新器: project_id={project_id}")
+
     # 防止 stop_all 重复调用的标志
     _stop_all_done = False
-    
+
     @classmethod
     def stop_all(cls):
         """停止所有更新器"""
@@ -528,14 +528,14 @@ class ZepGraphMemoryManager:
         if cls._stop_all_done:
             return
         cls._stop_all_done = True
-        
+
         with cls._lock:
             if cls._updaters:
-                for simulation_id, updater in list(cls._updaters.items()):
+                for project_id, updater in list(cls._updaters.items()):
                     try:
                         updater.stop()
                     except Exception as e:
-                        logger.error(f"停止更新器失败: simulation_id={simulation_id}, error={e}")
+                        logger.error(f"停止更新器失败: project_id={project_id}, error={e}")
                 cls._updaters.clear()
             logger.info("已停止所有图谱记忆更新器")
     

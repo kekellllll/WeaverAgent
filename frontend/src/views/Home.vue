@@ -2,9 +2,9 @@
   <div class="home-container">
     <!-- 顶部导航栏 -->
     <nav class="navbar">
-      <div class="nav-brand">MIROFISH</div>
+      <div class="nav-brand">WEAVERAGENT</div>
       <div class="nav-links">
-        <a href="https://github.com/666ghj/MiroFish" target="_blank" class="github-link">
+        <a href="https://github.com/666ghj/WeaverAgent" target="_blank" class="github-link">
           访问我们的Github主页 <span class="arrow">↗</span>
         </a>
       </div>
@@ -20,16 +20,16 @@
           </div>
           
           <h1 class="main-title">
-            上传任意报告<br>
-            <span class="gradient-text">即刻推演未来</span>
+            上传学术论文<br>
+            <span class="gradient-text">即刻洞察技术脉络</span>
           </h1>
           
           <div class="hero-desc">
             <p>
-              即使只有一段文字，<span class="highlight-bold">MiroFish</span> 也能基于其中的现实种子，全自动生成与之对应的至多<span class="highlight-orange">百万级Agent</span>构成的平行世界。通过上帝视角注入变量，在复杂的群体交互中寻找动态环境下的<span class="highlight-code">“局部最优解”</span>
+              只需上传一批 PDF 论文，<span class="highlight-bold">WeaverAgent</span> 将自动构建学术知识图谱，提取论文方法、引用关系与技术路径，并驱动 <span class="highlight-code">GraphRAG</span> 引擎回答复杂的技术溯源问题。
             </p>
             <p class="slogan-text">
-              让未来在 Agent 群中预演，让决策在百战后胜出<span class="blinking-cursor">_</span>
+              让论文之间的技术关联一目了然，让创新点分析触手可及<span class="blinking-cursor">_</span>
             </p>
           </div>
            
@@ -39,7 +39,7 @@
         <div class="hero-right">
           <!-- Logo 区域 -->
           <div class="logo-container">
-            <img src="../assets/logo/MiroFish_logo_left.jpeg" alt="MiroFish Logo" class="hero-logo" />
+            <img src="../assets/logo/MiroFish_logo_left.jpeg" alt="WeaverAgent Logo" class="hero-logo" />
           </div>
           
           <button class="scroll-down-btn" @click="scrollToBottom">
@@ -58,18 +58,18 @@
           
           <h2 class="section-title">准备就绪</h2>
           <p class="section-desc">
-            预测引擎待命中，可上传多份非结构化数据以初始化模拟序列
+            分析引擎待命中，可上传多篇学术论文 PDF 以构建知识图谱
           </p>
           
           <!-- 数据指标卡片 -->
           <div class="metrics-row">
             <div class="metric-card">
               <div class="metric-value">低成本</div>
-              <div class="metric-label">常规模拟平均5$/次</div>
+              <div class="metric-label">图谱构建平均 $1-3/次</div>
             </div>
             <div class="metric-card">
-              <div class="metric-value">高可用</div>
-              <div class="metric-label">最多百万级Agent模拟</div>
+              <div class="metric-value">深洞察</div>
+              <div class="metric-label">GraphRAG 多跳关系推理</div>
             </div>
           </div>
 
@@ -83,35 +83,35 @@
                 <span class="step-num">01</span>
                 <div class="step-info">
                   <div class="step-title">图谱构建</div>
-                  <div class="step-desc">现实种子提取 & 个体与群体记忆注入 & GraphRAG构建</div>
+                  <div class="step-desc">PDF 解析 & 实体/关系抽取 & 学术本体生成 & GraphRAG 构建</div>
                 </div>
               </div>
               <div class="workflow-item">
                 <span class="step-num">02</span>
                 <div class="step-info">
                   <div class="step-title">环境搭建</div>
-                  <div class="step-desc">实体关系抽取 & 人设生成 & 环境配置Agent注入仿真参数</div>
+                  <div class="step-desc">论文实体过滤 & 技术路径图生成 & 分析参数配置</div>
                 </div>
               </div>
               <div class="workflow-item">
                 <span class="step-num">03</span>
                 <div class="step-info">
-                  <div class="step-title">开始模拟</div>
-                  <div class="step-desc">双平台并行模拟 & 自动解析预测需求 & 动态更新时序记忆</div>
+                  <div class="step-title">图谱分析</div>
+                  <div class="step-desc">技术相似度检索 & 引用链溯源 & 创新点识别</div>
                 </div>
               </div>
               <div class="workflow-item">
                 <span class="step-num">04</span>
                 <div class="step-info">
                   <div class="step-title">报告生成</div>
-                  <div class="step-desc">ReportAgent拥有丰富的工具集与模拟后环境进行深度交互</div>
+                  <div class="step-desc">ReportAgent 深度检索图谱，生成技术路径分析报告</div>
                 </div>
               </div>
               <div class="workflow-item">
                 <span class="step-num">05</span>
                 <div class="step-info">
                   <div class="step-title">深度互动</div>
-                  <div class="step-desc">与模拟世界中的任意一位进行对话 & 与ReportAgent进行对话</div>
+                  <div class="step-desc">与任意论文/方法实体对话 & 与 ReportAgent 进行技术问答</div>
                 </div>
               </div>
             </div>
@@ -124,7 +124,7 @@
             <!-- 上传区域 -->
             <div class="console-section">
               <div class="console-header">
-                <span class="console-label">01 / 现实种子</span>
+                <span class="console-label">01 / 论文 PDF 文件</span>
                 <span class="console-meta">支持格式: PDF, MD, TXT</span>
               </div>
               
@@ -170,17 +170,17 @@
             <!-- 输入区域 -->
             <div class="console-section">
               <div class="console-header">
-                <span class="console-label">>_ 02 / 模拟提示词</span>
+                <span class="console-label">>_ 02 / 分析查询需求</span>
               </div>
               <div class="input-wrapper">
                 <textarea
-                  v-model="formData.simulationRequirement"
+                  v-model="formData.analysisRequirement"
                   class="code-input"
-                  placeholder="// 用自然语言输入模拟或预测需求（例.武大若发布撤销肖某处分的公告，会引发什么舆情走向）"
+                  placeholder="// 用自然语言描述分析需求（例：分析这批论文中与 Transformer attention 机制最相似的技术路径有哪些？哪些论文对此有先驱性贡献？）"
                   rows="6"
                   :disabled="loading"
                 ></textarea>
-                <div class="model-badge">引擎: MiroFish-V1.0</div>
+                <div class="model-badge">引擎: WeaverAgent-V1.0</div>
               </div>
             </div>
 
@@ -188,10 +188,10 @@
             <div class="console-section btn-section">
               <button 
                 class="start-engine-btn"
-                @click="startSimulation"
+                @click="startAnalysis"
                 :disabled="!canSubmit || loading"
               >
-                <span v-if="!loading">启动引擎</span>
+                <span v-if="!loading">启动分析引擎</span>
                 <span v-else>初始化中...</span>
                 <span class="btn-arrow">→</span>
               </button>
@@ -215,7 +215,7 @@ const router = useRouter()
 
 // 表单数据
 const formData = ref({
-  simulationRequirement: ''
+  analysisRequirement: ''
 })
 
 // 文件列表
@@ -231,7 +231,7 @@ const fileInput = ref(null)
 
 // 计算属性:是否可以提交
 const canSubmit = computed(() => {
-  return formData.value.simulationRequirement.trim() !== '' && files.value.length > 0
+  return formData.value.analysisRequirement.trim() !== '' && files.value.length > 0
 })
 
 // 触发文件选择
@@ -288,13 +288,13 @@ const scrollToBottom = () => {
   })
 }
 
-// 开始模拟 - 立即跳转，API调用在Process页面进行
-const startSimulation = () => {
+// 启动分析 - 立即跳转，API调用在Process页面进行
+const startAnalysis = () => {
   if (!canSubmit.value || loading.value) return
   
   // 存储待上传的数据
   import('../store/pendingUpload.js').then(({ setPendingUpload }) => {
-    setPendingUpload(files.value, formData.value.simulationRequirement)
+    setPendingUpload(files.value, formData.value.analysisRequirement)
     
     // 立即跳转到Process页面（使用特殊标识表示新建项目）
     router.push({

@@ -54,10 +54,10 @@ class GraphBuilderService:
         self,
         text: str,
         ontology: Dict[str, Any],
-        graph_name: str = "MiroFish Graph",
+        graph_name: str = "WeaverAgent Graph",
         chunk_size: int = 500,
         chunk_overlap: int = 50,
-        batch_size: int = 3
+        batch_size: int = 10
     ) -> str:
         """
         异步构建图谱
@@ -186,12 +186,12 @@ class GraphBuilderService:
     
     def create_graph(self, name: str) -> str:
         """创建Zep图谱（公开方法）"""
-        graph_id = f"mirofish_{uuid.uuid4().hex[:16]}"
+        graph_id = f"weaveragent_{uuid.uuid4().hex[:16]}"
         
         self.client.graph.create(
             graph_id=graph_id,
             name=name,
-            description="MiroFish Social Simulation Graph"
+            description="WeaverAgent Academic Knowledge Graph"
         )
         
         return graph_id
@@ -289,7 +289,7 @@ class GraphBuilderService:
         self,
         graph_id: str,
         chunks: List[str],
-        batch_size: int = 3,
+        batch_size: int = 10,
         progress_callback: Optional[Callable] = None
     ) -> List[str]:
         """分批添加文本到图谱，返回所有 episode 的 uuid 列表"""
@@ -329,7 +329,7 @@ class GraphBuilderService:
                             episode_uuids.append(ep_uuid)
                 
                 # 避免请求过快
-                time.sleep(1)
+                time.sleep(0.2)
                 
             except Exception as e:
                 if progress_callback:

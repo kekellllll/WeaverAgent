@@ -1,11 +1,27 @@
 import service, { requestWithRetry } from './index'
 
 /**
- * 开始报告生成
- * @param {Object} data - { simulation_id, force_regenerate? }
+ * 开始报告生成（基于 project_id）
+ * @param {Object} data - { project_id, force_regenerate? }
  */
 export const generateReport = (data) => {
   return requestWithRetry(() => service.post('/api/report/generate', data), 3, 1000)
+}
+
+/**
+ * 基于项目直接生成报告（无需模拟，用于纯图谱分析流程）
+ * @param {string} projectId - 项目ID
+ * @param {boolean} forceRegenerate - 是否强制重新生成
+ */
+export const generateReportByProject = (projectId, forceRegenerate = false) => {
+  return requestWithRetry(
+    () => service.post('/api/report/generate-by-project', {
+      project_id: projectId,
+      force_regenerate: forceRegenerate
+    }),
+    3,
+    1000
+  )
 }
 
 /**
@@ -44,7 +60,7 @@ export const getReport = (reportId) => {
 
 /**
  * 与 Report Agent 对话
- * @param {Object} data - { simulation_id, message, chat_history? }
+ * @param {Object} data - { project_id, message, chat_history? }
  */
 export const chatWithReport = (data) => {
   return requestWithRetry(() => service.post('/api/report/chat', data), 3, 1000)

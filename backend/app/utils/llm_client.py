@@ -60,10 +60,15 @@ class LLMClient:
         
         if response_format:
             kwargs["response_format"] = response_format
-        
+
+        # qwen3 系列（含 qwen3.x）默认开启思考模式，与 response_format 不兼容
+        # 通过 extra_body 传入 enable_thinking=False 强制关闭
+        if re.match(r'qwen3', self.model, re.IGNORECASE):
+            kwargs["extra_body"] = {"enable_thinking": False}
+
         response = self.client.chat.completions.create(**kwargs)
         content = response.choices[0].message.content
-        # 部分模型（如MiniMax M2.5）会在content中包含<think>思考内容，需要移除
+        # 兜底：移除 <think>...</think> 思考内容（防止部分模型忽略 enable_thinking）
         content = re.sub(r'<think>[\s\S]*?</think>', '', content).strip()
         return content
     

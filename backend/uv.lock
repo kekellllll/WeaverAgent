@@ -2,7 +2,9 @@ version = 1
 revision = 3
 requires-python = ">=3.11"
 resolution-markers = [
-    "python_full_version >= '3.12'",
+    "python_full_version >= '3.14'",
+    "python_full_version == '3.13.*'",
+    "python_full_version == '3.12.*'",
     "python_full_version < '3.12'",
 ]
 
@@ -1238,7 +1240,7 @@ wheels = [
 ]
 
 [[package]]
-name = "mirofish-backend"
+name = "weaveragent-backend"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

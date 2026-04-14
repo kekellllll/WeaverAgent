@@ -801,12 +801,25 @@ const handleResize = () => {
   nextTick(renderGraph)
 }
 
+let resizeObserver = null
+
 onMounted(() => {
   window.addEventListener('resize', handleResize)
+  // 监听容器自身尺寸变化（panel 宽度 CSS transition 不触发 window resize）
+  if (graphContainer.value && typeof ResizeObserver !== 'undefined') {
+    resizeObserver = new ResizeObserver(() => {
+      nextTick(renderGraph)
+    })
+    resizeObserver.observe(graphContainer.value)
+  }
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
+  if (resizeObserver) {
+    resizeObserver.disconnect()
+    resizeObserver = null
+  }
   if (currentSimulation) {
     currentSimulation.stop()
   }

@@ -1,6 +1,6 @@
 """
 Report API路由
-提供模拟报告生成、获取、对话等接口
+提供报告生成、获取、对话等接口
 """
 
 import os
@@ -11,259 +11,97 @@ from flask import request, jsonify, send_file
 from . import report_bp
 from ..config import Config
 from ..services.report_agent import ReportAgent, ReportManager, ReportStatus
-from ..services.simulation_manager import SimulationManager
 from ..models.project import ProjectManager
 from ..models.task import TaskManager, TaskStatus
 from ..utils.logger import get_logger
 
-logger = get_logger('mirofish.api.report')
+logger = get_logger('weaveragent.api.report')
 
 
 # ============== 报告生成接口 ==============
 
-@report_bp.route('/generate', methods=['POST'])
-def generate_report():
+@report_bp.route('/generate-by-project', methods=['POST'])
+def generate_report_by_project():
     """
-    生成模拟分析报告（异步任务）
-    
-    这是一个耗时操作，接口会立即返回task_id，
-    使用 GET /api/report/generate/status 查询进度
-    
+    基于项目直接生成报告（纯图谱分析流程，无需模拟）
+
     请求（JSON）：
         {
-            "simulation_id": "sim_xxxx",    // 必填，模拟ID
-            "force_regenerate": false        // 可选，强制重新生成
+            "project_id": "proj_xxxx",
+            "force_regenerate": false
         }
-    
+
     返回：
         {
             "success": true,
             "data": {
-                "simulation_id": "sim_xxxx",
-                "task_id": "task_xxxx",
-                "status": "generating",
+                "report_id": "report_xxxx",
                 "message": "报告生成任务已启动"
             }
         }
     """
     try:
         data = request.get_json() or {}
-        
-        simulation_id = data.get('simulation_id')
-        if not simulation_id:
-            return jsonify({
-                "success": False,
-                "error": "请提供 simulation_id"
-            }), 400
-        
+        project_id = data.get('project_id')
         force_regenerate = data.get('force_regenerate', False)
-        
-        # 获取模拟信息
-        manager = SimulationManager()
-        state = manager.get_simulation(simulation_id)
-        
-        if not state:
-            return jsonify({
-                "success": False,
-                "error": f"模拟不存在: {simulation_id}"
-            }), 404
-        
-        # 检查是否已有报告
+
+        if not project_id:
+            return jsonify({"success": False, "error": "请提供 project_id"}), 400
+
+        project = ProjectManager.get_project(project_id)
+        if not project:
+            return jsonify({"success": False, "error": f"项目不存在: {project_id}"}), 404
+
+        graph_id = project.graph_id
+        if not graph_id:
+            return jsonify({"success": False, "error": "项目尚未构建图谱"}), 400
+
         if not force_regenerate:
-            existing_report = ReportManager.get_report_by_simulation(simulation_id)
-            if existing_report and existing_report.status == ReportStatus.COMPLETED:
+            existing = ReportManager.get_report_by_simulation(project_id)
+            if existing and existing.status == ReportStatus.COMPLETED:
                 return jsonify({
                     "success": True,
                     "data": {
-                        "simulation_id": simulation_id,
-                        "report_id": existing_report.report_id,
-                        "status": "completed",
-                        "message": "报告已存在",
-                        "already_generated": True
+                        "report_id": existing.report_id,
+                        "message": "已有完成的报告",
+                        "status": existing.status.value
                     }
                 })
-        
-        # 获取项目信息
-        project = ProjectManager.get_project(state.project_id)
-        if not project:
-            return jsonify({
-                "success": False,
-                "error": f"项目不存在: {state.project_id}"
-            }), 404
-        
-        graph_id = state.graph_id or project.graph_id
-        if not graph_id:
-            return jsonify({
-                "success": False,
-                "error": "缺少图谱ID，请确保已构建图谱"
-            }), 400
-        
-        simulation_requirement = project.simulation_requirement
-        if not simulation_requirement:
-            return jsonify({
-                "success": False,
-                "error": "缺少模拟需求描述"
-            }), 400
-        
-        # 提前生成 report_id，以便立即返回给前端
-        import uuid
-        report_id = f"report_{uuid.uuid4().hex[:12]}"
-        
-        # 创建异步任务
-        task_manager = TaskManager()
-        task_id = task_manager.create_task(
-            task_type="report_generate",
-            metadata={
-                "simulation_id": simulation_id,
-                "graph_id": graph_id,
-                "report_id": report_id
-            }
+
+        analysis_requirement = project.analysis_requirement or ""
+
+        import uuid as _uuid
+        report_id = f"report_{_uuid.uuid4().hex[:12]}"
+
+        agent = ReportAgent(
+            graph_id=graph_id,
+            simulation_id=project_id,
+            simulation_requirement=analysis_requirement
         )
-        
-        # 定义后台任务
-        def run_generate():
+
+        def _generate():
             try:
-                task_manager.update_task(
-                    task_id,
-                    status=TaskStatus.PROCESSING,
-                    progress=0,
-                    message="初始化Report Agent..."
-                )
-                
-                # 创建Report Agent
-                agent = ReportAgent(
-                    graph_id=graph_id,
-                    simulation_id=simulation_id,
-                    simulation_requirement=simulation_requirement
-                )
-                
-                # 进度回调
-                def progress_callback(stage, progress, message):
-                    task_manager.update_task(
-                        task_id,
-                        progress=progress,
-                        message=f"[{stage}] {message}"
-                    )
-                
-                # 生成报告（传入预先生成的 report_id）
-                report = agent.generate_report(
-                    progress_callback=progress_callback,
-                    report_id=report_id
-                )
-                
-                # 保存报告
-                ReportManager.save_report(report)
-                
-                if report.status == ReportStatus.COMPLETED:
-                    task_manager.complete_task(
-                        task_id,
-                        result={
-                            "report_id": report.report_id,
-                            "simulation_id": simulation_id,
-                            "status": "completed"
-                        }
-                    )
-                else:
-                    task_manager.fail_task(task_id, report.error or "报告生成失败")
-                
+                agent.generate_report(report_id=report_id)
             except Exception as e:
-                logger.error(f"报告生成失败: {str(e)}")
-                task_manager.fail_task(task_id, str(e))
-        
-        # 启动后台线程
-        thread = threading.Thread(target=run_generate, daemon=True)
+                logger.error(f"报告生成失败: {e}")
+
+        thread = threading.Thread(target=_generate, daemon=True)
         thread.start()
-        
+
         return jsonify({
             "success": True,
             "data": {
-                "simulation_id": simulation_id,
                 "report_id": report_id,
-                "task_id": task_id,
-                "status": "generating",
-                "message": "报告生成任务已启动，请通过 /api/report/generate/status 查询进度",
-                "already_generated": False
+                "message": "报告生成任务已启动"
             }
         })
-        
+
     except Exception as e:
-        logger.error(f"启动报告生成任务失败: {str(e)}")
+        logger.error(f"创建报告失败: {str(e)}")
         return jsonify({
             "success": False,
             "error": str(e),
             "traceback": traceback.format_exc()
-        }), 500
-
-
-@report_bp.route('/generate/status', methods=['POST'])
-def get_generate_status():
-    """
-    查询报告生成任务进度
-    
-    请求（JSON）：
-        {
-            "task_id": "task_xxxx",         // 可选，generate返回的task_id
-            "simulation_id": "sim_xxxx"     // 可选，模拟ID
-        }
-    
-    返回：
-        {
-            "success": true,
-            "data": {
-                "task_id": "task_xxxx",
-                "status": "processing|completed|failed",
-                "progress": 45,
-                "message": "..."
-            }
-        }
-    """
-    try:
-        data = request.get_json() or {}
-        
-        task_id = data.get('task_id')
-        simulation_id = data.get('simulation_id')
-        
-        # 如果提供了simulation_id，先检查是否已有完成的报告
-        if simulation_id:
-            existing_report = ReportManager.get_report_by_simulation(simulation_id)
-            if existing_report and existing_report.status == ReportStatus.COMPLETED:
-                return jsonify({
-                    "success": True,
-                    "data": {
-                        "simulation_id": simulation_id,
-                        "report_id": existing_report.report_id,
-                        "status": "completed",
-                        "progress": 100,
-                        "message": "报告已生成",
-                        "already_completed": True
-                    }
-                })
-        
-        if not task_id:
-            return jsonify({
-                "success": False,
-                "error": "请提供 task_id 或 simulation_id"
-            }), 400
-        
-        task_manager = TaskManager()
-        task = task_manager.get_task(task_id)
-        
-        if not task:
-            return jsonify({
-                "success": False,
-                "error": f"任务不存在: {task_id}"
-            }), 404
-        
-        return jsonify({
-            "success": True,
-            "data": task.to_dict()
-        })
-        
-    except Exception as e:
-        logger.error(f"查询任务状态失败: {str(e)}")
-        return jsonify({
-            "success": False,
-            "error": str(e)
         }), 500
 
 
@@ -468,19 +306,17 @@ def delete_report(report_id: str):
 def chat_with_report_agent():
     """
     与Report Agent对话
-    
-    Report Agent可以在对话中自主调用检索工具来回答问题
-    
+
     请求（JSON）：
         {
-            "simulation_id": "sim_xxxx",        // 必填，模拟ID
-            "message": "请解释一下舆情走向",    // 必填，用户消息
+            "report_id": "report_xxxx",         // 必填，报告ID
+            "message": "请解释一下技术路径",    // 必填，用户消息
             "chat_history": [                   // 可选，对话历史
                 {"role": "user", "content": "..."},
                 {"role": "assistant", "content": "..."}
             ]
         }
-    
+
     返回：
         {
             "success": true,
@@ -493,63 +329,61 @@ def chat_with_report_agent():
     """
     try:
         data = request.get_json() or {}
-        
-        simulation_id = data.get('simulation_id')
+
+        report_id = data.get('report_id')
         message = data.get('message')
         chat_history = data.get('chat_history', [])
-        
-        if not simulation_id:
+
+        if not report_id:
             return jsonify({
                 "success": False,
-                "error": "请提供 simulation_id"
+                "error": "请提供 report_id"
             }), 400
-        
+
         if not message:
             return jsonify({
                 "success": False,
                 "error": "请提供 message"
             }), 400
-        
-        # 获取模拟和项目信息
-        manager = SimulationManager()
-        state = manager.get_simulation(simulation_id)
-        
-        if not state:
+
+        # 通过 report → project 拿 graph_id
+        report = ReportManager.get_report(report_id)
+        if not report:
             return jsonify({
                 "success": False,
-                "error": f"模拟不存在: {simulation_id}"
+                "error": f"报告不存在: {report_id}"
             }), 404
-        
-        project = ProjectManager.get_project(state.project_id)
+
+        project = ProjectManager.get_project(report.simulation_id)
         if not project:
             return jsonify({
                 "success": False,
-                "error": f"项目不存在: {state.project_id}"
+                "error": f"项目不存在: {report.simulation_id}"
             }), 404
-        
-        graph_id = state.graph_id or project.graph_id
+
+        graph_id = project.graph_id
         if not graph_id:
             return jsonify({
                 "success": False,
-                "error": "缺少图谱ID"
+                "error": "缺少图谱ID，请确保已构建图谱"
             }), 400
-        
-        simulation_requirement = project.simulation_requirement or ""
-        
+
+        analysis_requirement = project.analysis_requirement or ""
+
         # 创建Agent并进行对话
         agent = ReportAgent(
             graph_id=graph_id,
-            simulation_id=simulation_id,
-            simulation_requirement=simulation_requirement
+            simulation_id=report_id,
+            simulation_requirement=analysis_requirement
         )
-        
+
         result = agent.chat(message=message, chat_history=chat_history)
-        
+
         return jsonify({
             "success": True,
             "data": result
         })
-        
+
     except Exception as e:
         logger.error(f"对话失败: {str(e)}")
         return jsonify({
@@ -934,7 +768,7 @@ def search_graph_tool():
     
     请求（JSON）：
         {
-            "graph_id": "mirofish_xxxx",
+            "graph_id": "weaveragent_xxxx",
             "query": "搜索查询",
             "limit": 10
         }
@@ -982,7 +816,7 @@ def get_graph_statistics_tool():
     
     请求（JSON）：
         {
-            "graph_id": "mirofish_xxxx"
+            "graph_id": "weaveragent_xxxx"
         }
     """
     try:

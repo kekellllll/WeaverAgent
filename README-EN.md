@@ -1,24 +1,10 @@
 <div align="center">
 
-<img src="./static/image/MiroFish_logo_compressed.jpeg" alt="MiroFish Logo" width="75%"/>
+<img src="./static/image/MiroFish_logo_compressed.jpeg" alt="WeaverAgent Logo" width="75%"/>
 
-<a href="https://trendshift.io/repositories/16144" target="_blank"><img src="https://trendshift.io/api/badge/repositories/16144" alt="666ghj%2FMiroFish | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
-
-简洁通用的群体智能引擎，预测万物
+A GraphRAG-Powered Academic Knowledge Graph Analysis Engine
 </br>
-<em>A Simple and Universal Swarm Intelligence Engine, Predicting Anything</em>
-
-<a href="https://www.shanda.com/" target="_blank"><img src="./static/image/shanda_logo.png" alt="666ghj%2MiroFish | Shanda" height="40"/></a>
-
-[![GitHub Stars](https://img.shields.io/github/stars/666ghj/MiroFish?style=flat-square&color=DAA520)](https://github.com/666ghj/MiroFish/stargazers)
-[![GitHub Watchers](https://img.shields.io/github/watchers/666ghj/MiroFish?style=flat-square)](https://github.com/666ghj/MiroFish/watchers)
-[![GitHub Forks](https://img.shields.io/github/forks/666ghj/MiroFish?style=flat-square)](https://github.com/666ghj/MiroFish/network)
-[![Docker](https://img.shields.io/badge/Docker-Build-2496ED?style=flat-square&logo=docker&logoColor=white)](https://hub.docker.com/)
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/666ghj/MiroFish)
-
-[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=flat-square&logo=discord&logoColor=white)](http://discord.gg/ePf5aPaHnA)
-[![X](https://img.shields.io/badge/X-Follow-000000?style=flat-square&logo=x&logoColor=white)](https://x.com/mirofish_ai)
-[![Instagram](https://img.shields.io/badge/Instagram-Follow-E4405F?style=flat-square&logo=instagram&logoColor=white)](https://www.instagram.com/mirofish_ai/)
+<em>基于 GraphRAG 的学术知识图谱分析引擎</em>
 
 [English](./README-EN.md) | [中文文档](./README.md)
 
@@ -26,70 +12,25 @@
 
 ## ⚡ Overview
 
-**MiroFish** is a next-generation AI prediction engine powered by multi-agent technology. By extracting seed information from the real world (such as breaking news, policy drafts, or financial signals), it automatically constructs a high-fidelity parallel digital world. Within this space, thousands of intelligent agents with independent personalities, long-term memory, and behavioral logic freely interact and undergo social evolution. You can inject variables dynamically from a "God's-eye view" to precisely deduce future trajectories — **rehearse the future in a digital sandbox, and win decisions after countless simulations**.
+**WeaverAgent** is a GraphRAG-powered academic knowledge graph analysis engine. Upload PDF papers and the system automatically extracts entities and relationships to build an academic knowledge graph covering core dimensions such as methods, innovations, datasets, and metrics. Leveraging GraphRAG's multi-hop reasoning capabilities, it generates in-depth technical pathway analysis reports and supports natural language Q&A over graph entities.
 
-> You only need to: Upload seed materials (data analysis reports or interesting novel stories) and describe your prediction requirements in natural language</br>
-> MiroFish will return: A detailed prediction report and a deeply interactive high-fidelity digital world
+> You only need to: Upload a batch of PDF papers and describe your analysis requirements in natural language</br>
+> WeaverAgent will return: A structured academic knowledge graph, a technical pathway analysis report, and an interactive Q&A system
 
-### Our Vision
+### Core Capabilities
 
-MiroFish is dedicated to creating a swarm intelligence mirror that maps reality. By capturing the collective emergence triggered by individual interactions, we break through the limitations of traditional prediction:
-
-- **At the Macro Level**: We are a rehearsal laboratory for decision-makers, allowing policies and public relations to be tested at zero risk
-- **At the Micro Level**: We are a creative sandbox for individual users — whether deducing novel endings or exploring imaginative scenarios, everything can be fun, playful, and accessible
-
-From serious predictions to playful simulations, we let every "what if" see its outcome, making it possible to predict anything.
-
-## 🌐 Live Demo
-
-Welcome to visit our online demo environment and experience a prediction simulation on trending public opinion events we've prepared for you: [mirofish-live-demo](https://666ghj.github.io/mirofish-demo/)
-
-## 📸 Screenshots
-
-<div align="center">
-<table>
-<tr>
-<td><img src="./static/image/Screenshot/运行截图1.png" alt="Screenshot 1" width="100%"/></td>
-<td><img src="./static/image/Screenshot/运行截图2.png" alt="Screenshot 2" width="100%"/></td>
-</tr>
-<tr>
-<td><img src="./static/image/Screenshot/运行截图3.png" alt="Screenshot 3" width="100%"/></td>
-<td><img src="./static/image/Screenshot/运行截图4.png" alt="Screenshot 4" width="100%"/></td>
-</tr>
-<tr>
-<td><img src="./static/image/Screenshot/运行截图5.png" alt="Screenshot 5" width="100%"/></td>
-<td><img src="./static/image/Screenshot/运行截图6.png" alt="Screenshot 6" width="100%"/></td>
-</tr>
-</table>
-</div>
-
-## 🎬 Demo Videos
-
-### 1. Wuhan University Public Opinion Simulation + MiroFish Project Introduction
-
-<div align="center">
-<a href="https://www.bilibili.com/video/BV1VYBsBHEMY/" target="_blank"><img src="./static/image/武大模拟演示封面.png" alt="MiroFish Demo Video" width="75%"/></a>
-
-Click the image to watch the complete demo video for prediction using BettaFish-generated "Wuhan University Public Opinion Report"
-</div>
-
-### 2. Dream of the Red Chamber Lost Ending Simulation
-
-<div align="center">
-<a href="https://www.bilibili.com/video/BV1cPk3BBExq" target="_blank"><img src="./static/image/红楼梦模拟推演封面.jpg" alt="MiroFish Demo Video" width="75%"/></a>
-
-Click the image to watch MiroFish's deep prediction of the lost ending based on hundreds of thousands of words from the first 80 chapters of "Dream of the Red Chamber"
-</div>
-
-> **Financial Prediction**, **Political News Prediction** and more examples coming soon...
+- **Automatic Ontology Design**: LLM analyzes paper content and generates 8 core entity types (Paper, Method, Innovation, Task, Dataset, Metric, Baseline, Author) with their relationships
+- **GraphRAG Construction**: Builds high-quality knowledge graphs via Zep Cloud with multi-hop relationship reasoning
+- **Deep Analysis Reports**: ReportAgent autonomously searches the graph, reflects and reasons, generating structured technical pathway analysis reports
+- **Interactive Q&A**: Hybrid RAG combining graph and vector retrieval for precise answers to technical provenance questions
 
 ## 🔄 Workflow
 
-1. **Graph Building**: Seed extraction & Individual/collective memory injection & GraphRAG construction
-2. **Environment Setup**: Entity relationship extraction & Persona generation & Agent configuration injection
-3. **Simulation**: Dual-platform parallel simulation & Auto-parse prediction requirements & Dynamic temporal memory updates
-4. **Report Generation**: ReportAgent with rich toolset for deep interaction with post-simulation environment
-5. **Deep Interaction**: Chat with any agent in the simulated world & Interact with ReportAgent
+1. **Graph Building**: PDF parsing → text extraction → LLM ontology generation → Zep GraphRAG construction
+2. **Environment Setup**: Entity-relationship visualization → graph statistics → analysis parameter configuration
+3. **Graph Analysis**: Node/edge type distribution → hub node identification → technical pathway analysis
+4. **Report Generation**: ReportAgent multi-round graph retrieval → ReACT reasoning → section-by-section report generation
+5. **Deep Interaction**: Chat with ReportAgent → graph entity Q&A → RAG paragraph retrieval
 
 ## 🚀 Quick Start
 
@@ -117,14 +58,27 @@ cp .env.example .env
 ```env
 # LLM API Configuration (supports any LLM API with OpenAI SDK format)
 # Recommended: Alibaba Qwen-plus model via Bailian Platform: https://bailian.console.aliyun.com/
-# High consumption, try simulations with fewer than 40 rounds first
 LLM_API_KEY=your_api_key
 LLM_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 LLM_MODEL_NAME=qwen-plus
 
-# Zep Cloud Configuration
+# Zep Cloud Configuration (required for GraphRAG construction)
 # Free monthly quota is sufficient for simple usage: https://app.getzep.com/
 ZEP_API_KEY=your_zep_api_key
+```
+
+**Optional Environment Variables:**
+
+```env
+# Neo4j Configuration (local graph database for advanced retrieval scenarios)
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=your_password
+
+# Report Agent Configuration
+REPORT_AGENT_MAX_TOOL_CALLS=5
+REPORT_AGENT_MAX_REFLECTION_ROUNDS=2
+REPORT_AGENT_TEMPERATURE=0.5
 ```
 
 #### 2. Install Dependencies
@@ -162,6 +116,13 @@ npm run backend   # Start backend only
 npm run frontend  # Start frontend only
 ```
 
+**Shell Script:**
+
+```bash
+./start.sh   # One-click start
+./stop.sh    # One-click stop
+```
+
 ### Option 2: Docker Deployment
 
 ```bash
@@ -176,28 +137,17 @@ Reads `.env` from root directory by default, maps ports `3000 (frontend) / 5001 
 
 > Mirror address for faster pulling is provided as comments in `docker-compose.yml`, replace if needed.
 
-## 📬 Join the Conversation
+## 🏗️ Tech Stack
 
-<div align="center">
-<img src="./static/image/QQ群.png" alt="QQ Group" width="60%"/>
-</div>
-
-&nbsp;
-
-The MiroFish team is recruiting full-time/internship positions. If you're interested in multi-agent simulation and LLM applications, feel free to send your resume to: **mirofish@shanda.com**
+| Layer | Stack |
+|-------|-------|
+| Frontend | Vue 3 + Vue Router 4 + Vite + D3.js (graph visualization) |
+| Backend | Flask 3 + Flask-CORS |
+| Graph Engine | Zep Cloud (GraphRAG) + Neo4j (optional local graph DB) |
+| LLM | OpenAI SDK format (compatible with Qwen, GPT, Claude, etc.) |
+| Vector Retrieval | ChromaDB (RAG paragraph retrieval) |
+| File Processing | PyMuPDF (PDF parsing) + charset-normalizer |
 
 ## 📄 Acknowledgments
 
-**MiroFish has received strategic support and incubation from Shanda Group!**
-
-MiroFish's simulation engine is powered by **[OASIS (Open Agent Social Interaction Simulations)](https://github.com/camel-ai/oasis)**, We sincerely thank the CAMEL-AI team for their open-source contributions!
-
-## 📈 Project Statistics
-
-<a href="https://www.star-history.com/#666ghj/MiroFish&type=date&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=666ghj/MiroFish&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=666ghj/MiroFish&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=666ghj/MiroFish&type=date&legend=top-left" />
- </picture>
-</a>
+**WeaverAgent has received strategic support and incubation from Shanda Group!**

@@ -45,7 +45,7 @@ class Project:
     graph_build_task_id: Optional[str] = None
     
     # 配置
-    simulation_requirement: Optional[str] = None
+    analysis_requirement: Optional[str] = None
     chunk_size: int = 500
     chunk_overlap: int = 50
     
@@ -66,7 +66,7 @@ class Project:
             "analysis_summary": self.analysis_summary,
             "graph_id": self.graph_id,
             "graph_build_task_id": self.graph_build_task_id,
-            "simulation_requirement": self.simulation_requirement,
+            "analysis_requirement": self.analysis_requirement,
             "chunk_size": self.chunk_size,
             "chunk_overlap": self.chunk_overlap,
             "error": self.error
@@ -91,7 +91,7 @@ class Project:
             analysis_summary=data.get('analysis_summary'),
             graph_id=data.get('graph_id'),
             graph_build_task_id=data.get('graph_build_task_id'),
-            simulation_requirement=data.get('simulation_requirement'),
+            analysis_requirement=data.get('analysis_requirement') or data.get('simulation_requirement'),
             chunk_size=data.get('chunk_size', 500),
             chunk_overlap=data.get('chunk_overlap', 50),
             error=data.get('error')

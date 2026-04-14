@@ -26,32 +26,22 @@ def _to_pascal_case(name: str) -> str:
 
 
 # 本体生成的系统提示词
-ONTOLOGY_SYSTEM_PROMPT = """你是一个专业的知识图谱本体设计专家。你的任务是分析给定的文本内容和模拟需求，设计适合**社交媒体舆论模拟**的实体类型和关系类型。
+ONTOLOGY_SYSTEM_PROMPT = """你是一个专业的学术知识图谱本体设计专家。你的任务是分析给定的学术论文文本，设计适合**学术论文技术知识图谱**的实体类型和关系类型。
 
 **重要：你必须输出有效的JSON格式数据，不要输出任何其他内容。**
 
 ## 核心任务背景
 
-我们正在构建一个**社交媒体舆论模拟系统**。在这个系统中：
-- 每个实体都是一个可以在社交媒体上发声、互动、传播信息的"账号"或"主体"
-- 实体之间会相互影响、转发、评论、回应
-- 我们需要模拟舆论事件中各方的反应和信息传播路径
+我们正在构建一个**学术论文技术知识图谱**。目标是从论文中提取：
+- **技术/方法**（本文提出或使用的技术手段、算法、模型、框架）
+- **创新点**（本文相对于已有工作的改进和突破）
+- **效果/指标**（在哪些任务上取得了什么样的性能表现）
+- **数据集**（实验使用的数据集）
+- **任务**（论文解决的具体问题/任务）
+- **对比方法**（baseline 方法）
+- **作者与机构**（论文作者及其所属机构）
 
-因此，**实体必须是现实中真实存在的、可以在社媒上发声和互动的主体**：
-
-**可以是**：
-- 具体的个人（公众人物、当事人、意见领袖、专家学者、普通人）
-- 公司、企业（包括其官方账号）
-- 组织机构（大学、协会、NGO、工会等）
-- 政府部门、监管机构
-- 媒体机构（报纸、电视台、自媒体、网站）
-- 社交媒体平台本身
-- 特定群体代表（如校友会、粉丝团、维权群体等）
-
-**不可以是**：
-- 抽象概念（如"舆论"、"情绪"、"趋势"）
-- 主题/话题（如"学术诚信"、"教育改革"）
-- 观点/态度（如"支持方"、"反对方"）
+知识图谱用于后续 RAG 检索：用户提问"这篇论文用了什么方法""创新点是什么""在哪些数据集上测试的""效果如何"时，能精准召回相关节点和关系。
 
 ## 输出格式
 
@@ -83,92 +73,76 @@ ONTOLOGY_SYSTEM_PROMPT = """你是一个专业的知识图谱本体设计专家�
             "attributes": []
         }
     ],
-    "analysis_summary": "对文本内容的简要分析说明（中文）"
+    "analysis_summary": "对论文内容的简要分析说明（中文，包括论文领域、主要技术和核心贡献）"
 }
 ```
 
 ## 设计指南（极其重要！）
 
-### 1. 实体类型设计 - 必须严格遵守
+### 1. 实体类型设计 — 固定8个核心类型
 
-**数量要求：必须正好10个实体类型**
+**必须严格使用以下8个实体类型，不得增减，不得改名：**
 
-**层次结构要求（必须同时包含具体类型和兜底类型）**：
+1. **Paper** — 论文本身
+   - 属性：`title`（论文标题）、`venue`（发表期刊/会议）、`pub_year`（发表年份）
 
-你的10个实体类型必须包含以下层次：
+2. **Method** — 本文提出或使用的技术方法/模型/算法/框架/模块
+   - 包括：神经网络结构、注意力机制、损失函数、训练策略、推理算法等
+   - 属性：`tech_type`（技术类别，如 "neural network / attention / training strategy"）、`detail`（一句话描述）
 
-A. **兜底类型（必须包含，放在列表最后2个）**：
-   - `Person`: 任何自然人个体的兜底类型。当一个人不属于其他更具体的人物类型时，归入此类。
-   - `Organization`: 任何组织机构的兜底类型。当一个组织不属于其他更具体的组织类型时，归入此类。
+3. **Innovation** — 本文相对于已有工作的创新点/贡献/改进
+   - 区别于 Method：Method 是"做了什么"，Innovation 是"比之前好在哪里"
+   - 属性：`contribution_type`（类型，如 "architecture / efficiency / generalization"）、`detail`（一句话描述）
 
-B. **具体类型（8个，根据文本内容设计）**：
-   - 针对文本中出现的主要角色，设计更具体的类型
-   - 例如：如果文本涉及学术事件，可以有 `Student`, `Professor`, `University`
-   - 例如：如果文本涉及商业事件，可以有 `Company`, `CEO`, `Employee`
+4. **Task** — 论文针对的具体 NLP/CV/ML 任务或应用场景
+   - 例如：文本分类、机器翻译、目标检测、问答系统
+   - 属性：`task_type`（任务大类）、`domain`（应用领域）
 
-**为什么需要兜底类型**：
-- 文本中会出现各种人物，如"中小学教师"、"路人甲"、"某位网友"
-- 如果没有专门的类型匹配，他们应该被归入 `Person`
-- 同理，小型组织、临时团体等应该归入 `Organization`
+5. **Dataset** — 实验用到的数据集（包括训练集、测试集、基准集）
+   - 属性：`scale`（数据规模）、`data_type`（数据类型，如 "text / image / multimodal"）
 
-**具体类型的设计原则**：
-- 从文本中识别出高频出现或关键的角色类型
-- 每个具体类型应该有明确的边界，避免重叠
-- description 必须清晰说明这个类型和兜底类型的区别
+6. **Metric** — 评估指标（Accuracy、F1、BLEU、ROUGE、mAP 等）以及具体数值结果
+   - 属性：`metric_value`（具体数值）、`comparison`（与基线相比的提升）
 
-### 2. 关系类型设计
+7. **Baseline** — 对比方法/baseline 模型（本文要超越的已有方法）
+   - 属性：`venue`（该方法来自哪篇论文或哪个系统）、`detail`（一句话描述）
 
-- 数量：6-10个
-- 关系应该反映社媒互动中的真实联系
-- 确保关系的 source_targets 涵盖你定义的实体类型
+8. **Author** — 论文作者及其所属机构
+   - 属性：`affiliation`（所属机构）、`role`（角色，如 "first author / corresponding author"）
 
-### 3. 属性设计
+**注意**：
+- 属性名不能使用 `name`、`uuid`、`group_id`、`created_at`、`summary`（系统保留字）
+- 使用 `title`、`detail`、`tech_type`、`venue` 等替代
 
-- 每个实体类型1-3个关键属性
-- **注意**：属性名不能使用 `name`、`uuid`、`group_id`、`created_at`、`summary`（这些是系统保留字）
-- 推荐使用：`full_name`, `title`, `role`, `position`, `location`, `description` 等
+### 2. 关系类型设计 — 必须正好8个，从以下固定集合中选择
 
-## 实体类型参考
+**从下面列表中选择恰好8个，根据论文内容判断哪些关系最重要：**
 
-**个人类（具体）**：
-- Student: 学生
-- Professor: 教授/学者
-- Journalist: 记者
-- Celebrity: 明星/网红
-- Executive: 高管
-- Official: 政府官员
-- Lawyer: 律师
-- Doctor: 医生
+候选关系（共12个，选8个）：
+- `PROPOSES` — Paper → Method/Innovation（本文提出了...）
+- `USES` — Paper/Method → Method/Dataset（使用/依赖了...）
+- `EVALUATES_ON` — Paper → Dataset（在...数据集上评估）
+- `ACHIEVES` — Paper/Method → Metric（取得了...指标结果）
+- `OUTPERFORMS` — Method/Paper → Baseline（超越了...基线）
+- `SOLVES` — Paper/Method → Task（解决了...任务）
+- `IMPROVES_OVER` — Innovation → Baseline/Method（对...的改进）
+- `COMPARED_WITH` — Paper → Baseline（与...方法对比）
+- `AUTHORED_BY` — Paper → Author（由...撰写）
+- `BUILDS_ON` — Method/Innovation → Method/Baseline（基于...构建）
+- `APPLIED_TO` — Method → Task/Dataset（应用于...）
+- `MEASURED_BY` — Task/Method → Metric（用...衡量效果）
 
-**个人类（兜底）**：
-- Person: 任何自然人（不属于上述具体类型时使用）
+**选择原则**：
+- 优先选择在论文中频繁出现的关系
+- 确保 `PROPOSES`、`EVALUATES_ON`、`ACHIEVES` 三个核心关系必须包含
+- 其余5个根据论文内容灵活选择
 
-**组织类（具体）**：
-- University: 高校
-- Company: 公司企业
-- GovernmentAgency: 政府机构
-- MediaOutlet: 媒体机构
-- Hospital: 医院
-- School: 中小学
-- NGO: 非政府组织
+### 3. source_targets 填写规则
 
-**组织类（兜底）**：
-- Organization: 任何组织机构（不属于上述具体类型时使用）
-
-## 关系类型参考
-
-- WORKS_FOR: 工作于
-- STUDIES_AT: 就读于
-- AFFILIATED_WITH: 隶属于
-- REPRESENTS: 代表
-- REGULATES: 监管
-- REPORTS_ON: 报道
-- COMMENTS_ON: 评论
-- RESPONDS_TO: 回应
-- SUPPORTS: 支持
-- OPPOSES: 反对
-- COLLABORATES_WITH: 合作
-- COMPETES_WITH: 竞争
+每个关系的 source_targets 必须精确填写，只列出合理的源-目标组合，例如：
+- `PROPOSES`: [{"source": "Paper", "target": "Method"}, {"source": "Paper", "target": "Innovation"}]
+- `ACHIEVES`: [{"source": "Paper", "target": "Metric"}, {"source": "Method", "target": "Metric"}]
+- `AUTHORED_BY`: [{"source": "Paper", "target": "Author"}]
 """
 
 
@@ -184,7 +158,7 @@ class OntologyGenerator:
     def generate(
         self,
         document_texts: List[str],
-        simulation_requirement: str,
+        analysis_requirement: str,
         additional_context: Optional[str] = None
     ) -> Dict[str, Any]:
         """
@@ -192,7 +166,7 @@ class OntologyGenerator:
         
         Args:
             document_texts: 文档文本列表
-            simulation_requirement: 模拟需求描述
+            analysis_requirement: 分析需求描述
             additional_context: 额外上下文
             
         Returns:
@@ -201,7 +175,7 @@ class OntologyGenerator:
         # 构建用户消息
         user_message = self._build_user_message(
             document_texts, 
-            simulation_requirement,
+            analysis_requirement,
             additional_context
         )
         
@@ -228,7 +202,7 @@ class OntologyGenerator:
     def _build_user_message(
         self,
         document_texts: List[str],
-        simulation_requirement: str,
+        analysis_requirement: str,
         additional_context: Optional[str]
     ) -> str:
         """构建用户消息"""
@@ -242,11 +216,11 @@ class OntologyGenerator:
             combined_text = combined_text[:self.MAX_TEXT_LENGTH_FOR_LLM]
             combined_text += f"\n\n...(原文共{original_length}字，已截取前{self.MAX_TEXT_LENGTH_FOR_LLM}字用于本体分析)..."
         
-        message = f"""## 模拟需求
+        message = f"""## 分析需求
 
-{simulation_requirement}
+{analysis_requirement}
 
-## 文档内容
+## 论文内容
 
 {combined_text}
 """
@@ -259,14 +233,14 @@ class OntologyGenerator:
 """
         
         message += """
-请根据以上内容，设计适合社会舆论模拟的实体类型和关系类型。
+请根据以上学术论文内容，设计知识图谱本体。
 
 **必须遵守的规则**：
-1. 必须正好输出10个实体类型
-2. 最后2个必须是兜底类型：Person（个人兜底）和 Organization（组织兜底）
-3. 前8个是根据文本内容设计的具体类型
-4. 所有实体类型必须是现实中可以发声的主体，不能是抽象概念
-5. 属性名不能使用 name、uuid、group_id 等保留字，用 full_name、org_name 等替代
+1. entity_types 必须正好8个，使用 system prompt 中规定的固定类型：Paper、Method、Innovation、Task、Dataset、Metric、Baseline、Author，顺序不变，名称不变
+2. edge_types 必须正好8个，从候选12个关系中选择，其中 PROPOSES、EVALUATES_ON、ACHIEVES 三个必须包含
+3. 每个关系的 source_targets 要填写准确，反映论文中实际存在的关系方向
+4. analysis_summary 用中文总结：论文领域、核心方法、主要创新点、实验数据集和关键效果指标
+5. 属性名不能使用 name、uuid、group_id、created_at、summary 等保留字
 """
         
         return message
@@ -338,57 +312,132 @@ class OntologyGenerator:
                 logger.warning(f"Duplicate entity type '{name}' removed during validation")
         result["entity_types"] = deduped
 
-        # 兜底类型定义
-        person_fallback = {
-            "name": "Person",
-            "description": "Any individual person not fitting other specific person types.",
-            "attributes": [
-                {"name": "full_name", "type": "text", "description": "Full name of the person"},
-                {"name": "role", "type": "text", "description": "Role or occupation"}
-            ],
-            "examples": ["ordinary citizen", "anonymous netizen"]
+        # 学术知识图谱的8个固定实体类型及默认定义
+        REQUIRED_ACADEMIC_TYPES = {
+            "Paper": {
+                "name": "Paper",
+                "description": "An academic paper or publication being analyzed.",
+                "attributes": [
+                    {"name": "title", "type": "text", "description": "Full title of the paper"},
+                    {"name": "venue", "type": "text", "description": "Journal or conference where published"},
+                    {"name": "pub_year", "type": "text", "description": "Year of publication"}
+                ],
+                "examples": ["Attention Is All You Need", "BERT: Pre-training of Deep Bidirectional Transformers"]
+            },
+            "Method": {
+                "name": "Method",
+                "description": "A technical method, model, algorithm, or framework proposed or used in the paper.",
+                "attributes": [
+                    {"name": "tech_type", "type": "text", "description": "Category: neural network / attention / training strategy / etc."},
+                    {"name": "detail", "type": "text", "description": "One-sentence description of the method"}
+                ],
+                "examples": ["Transformer", "BERT", "Cross-Attention", "Contrastive Loss"]
+            },
+            "Innovation": {
+                "name": "Innovation",
+                "description": "A specific contribution or improvement over prior work introduced by the paper.",
+                "attributes": [
+                    {"name": "contribution_type", "type": "text", "description": "Type: architecture / efficiency / generalization / etc."},
+                    {"name": "detail", "type": "text", "description": "One-sentence description of the innovation"}
+                ],
+                "examples": ["eliminates recurrence for parallelization", "achieves state-of-the-art with less compute"]
+            },
+            "Task": {
+                "name": "Task",
+                "description": "A specific NLP/CV/ML task or application scenario addressed by the paper.",
+                "attributes": [
+                    {"name": "task_type", "type": "text", "description": "High-level category of the task"},
+                    {"name": "domain", "type": "text", "description": "Application domain"}
+                ],
+                "examples": ["Machine Translation", "Text Classification", "Object Detection"]
+            },
+            "Dataset": {
+                "name": "Dataset",
+                "description": "A dataset used for training, evaluation, or benchmarking in the paper.",
+                "attributes": [
+                    {"name": "scale", "type": "text", "description": "Size or scale of the dataset"},
+                    {"name": "data_type", "type": "text", "description": "Type: text / image / multimodal / etc."}
+                ],
+                "examples": ["WMT 2014 English-German", "ImageNet", "SQuAD"]
+            },
+            "Metric": {
+                "name": "Metric",
+                "description": "An evaluation metric and its measured value reported in the paper.",
+                "attributes": [
+                    {"name": "metric_value", "type": "text", "description": "Concrete numeric result"},
+                    {"name": "comparison", "type": "text", "description": "Improvement over baseline"}
+                ],
+                "examples": ["BLEU 28.4", "F1 93.2", "Accuracy 95.1%"]
+            },
+            "Baseline": {
+                "name": "Baseline",
+                "description": "A prior method or model used as a comparison baseline in the paper.",
+                "attributes": [
+                    {"name": "venue", "type": "text", "description": "Paper or system the baseline comes from"},
+                    {"name": "detail", "type": "text", "description": "One-sentence description"}
+                ],
+                "examples": ["RNN Seq2Seq", "ResNet-50", "GPT-2"]
+            },
+            "Author": {
+                "name": "Author",
+                "description": "An author of the paper and their institutional affiliation.",
+                "attributes": [
+                    {"name": "affiliation", "type": "text", "description": "Institution the author belongs to"},
+                    {"name": "role", "type": "text", "description": "Role: first author / corresponding author / etc."}
+                ],
+                "examples": ["Ashish Vaswani", "Jacob Devlin"]
+            }
         }
-        
-        organization_fallback = {
-            "name": "Organization",
-            "description": "Any organization not fitting other specific organization types.",
-            "attributes": [
-                {"name": "org_name", "type": "text", "description": "Name of the organization"},
-                {"name": "org_type", "type": "text", "description": "Type of organization"}
-            ],
-            "examples": ["small business", "community group"]
-        }
-        
-        # 检查是否已有兜底类型
-        entity_names = {e["name"] for e in result["entity_types"]}
-        has_person = "Person" in entity_names
-        has_organization = "Organization" in entity_names
-        
-        # 需要添加的兜底类型
-        fallbacks_to_add = []
-        if not has_person:
-            fallbacks_to_add.append(person_fallback)
-        if not has_organization:
-            fallbacks_to_add.append(organization_fallback)
-        
-        if fallbacks_to_add:
-            current_count = len(result["entity_types"])
-            needed_slots = len(fallbacks_to_add)
-            
-            # 如果添加后会超过 10 个，需要移除一些现有类型
-            if current_count + needed_slots > MAX_ENTITY_TYPES:
-                # 计算需要移除多少个
-                to_remove = current_count + needed_slots - MAX_ENTITY_TYPES
-                # 从末尾移除（保留前面更重要的具体类型）
-                result["entity_types"] = result["entity_types"][:-to_remove]
-            
-            # 添加兜底类型
-            result["entity_types"].extend(fallbacks_to_add)
-        
-        # 最终确保不超过限制（防御性编程）
+
+        # 确保所有8个固定类型都存在；LLM 返回的同名类型优先保留，缺失的用默认值补齐
+        entity_names_present = {e["name"] for e in result["entity_types"]}
+        for type_name, default_def in REQUIRED_ACADEMIC_TYPES.items():
+            if type_name not in entity_names_present:
+                logger.warning(f"Required academic entity type '{type_name}' missing, adding default.")
+                result["entity_types"].append(default_def)
+
+        # 最终截断到 MAX_ENTITY_TYPES（防御性）
         if len(result["entity_types"]) > MAX_ENTITY_TYPES:
             result["entity_types"] = result["entity_types"][:MAX_ENTITY_TYPES]
-        
+
+        # 必须包含的3个核心关系
+        REQUIRED_EDGE_NAMES = {"PROPOSES", "EVALUATES_ON", "ACHIEVES"}
+        present_edges = {e.get("name", "") for e in result["edge_types"]}
+        missing_required = REQUIRED_EDGE_NAMES - present_edges
+
+        REQUIRED_EDGE_DEFAULTS = {
+            "PROPOSES": {
+                "name": "PROPOSES",
+                "description": "Paper proposes a method or innovation.",
+                "source_targets": [
+                    {"source": "Paper", "target": "Method"},
+                    {"source": "Paper", "target": "Innovation"}
+                ],
+                "attributes": []
+            },
+            "EVALUATES_ON": {
+                "name": "EVALUATES_ON",
+                "description": "Paper or method is evaluated on a dataset.",
+                "source_targets": [
+                    {"source": "Paper", "target": "Dataset"},
+                    {"source": "Method", "target": "Dataset"}
+                ],
+                "attributes": []
+            },
+            "ACHIEVES": {
+                "name": "ACHIEVES",
+                "description": "Paper or method achieves a performance metric result.",
+                "source_targets": [
+                    {"source": "Paper", "target": "Metric"},
+                    {"source": "Method", "target": "Metric"}
+                ],
+                "attributes": []
+            }
+        }
+        for edge_name in missing_required:
+            logger.warning(f"Required edge type '{edge_name}' missing, adding default.")
+            result["edge_types"].append(REQUIRED_EDGE_DEFAULTS[edge_name])
+
         if len(result["edge_types"]) > MAX_EDGE_TYPES:
             result["edge_types"] = result["edge_types"][:MAX_EDGE_TYPES]
         
@@ -407,7 +456,7 @@ class OntologyGenerator:
         code_lines = [
             '"""',
             '自定义实体类型定义',
-            '由MiroFish自动生成，用于社会舆论模拟',
+            '由WeaverAgent自动生成，用于学术知识图谱构建',
             '"""',
             '',
             'from pydantic import Field',

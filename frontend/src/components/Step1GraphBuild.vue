@@ -18,7 +18,7 @@
         <div class="card-content">
           <p class="api-note">POST /api/graph/ontology/generate</p>
           <p class="description">
-            LLM分析文档内容与模拟需求，提取出现实种子，自动生成合适的本体结构
+            LLM 分析论文内容与分析需求，自动识别论文领域，生成适合学术知识图谱的本体结构（Paper、Method、Dataset、Concept 等实体类型及引用、演进关系）
           </p>
 
           <!-- Loading / Progress -->
@@ -122,7 +122,7 @@
         <div class="card-content">
           <p class="api-note">POST /api/graph/build</p>
           <p class="description">
-            基于生成的本体，将文档自动分块后调用 Zep 构建知识图谱，提取实体和关系，并形成时序记忆与社区摘要
+            基于生成的学术本体，将论文内容自动分块后调用 Zep 构建知识图谱，提取论文、方法、数据集等实体及其引用/演进关系，形成可查询的 GraphRAG 索引
           </p>
           
           <!-- Stats Cards -->
@@ -156,15 +156,14 @@
         </div>
         
         <div class="card-content">
-          <p class="api-note">POST /api/simulation/create</p>
-          <p class="description">图谱构建已完成，请进入下一步进行模拟环境搭建</p>
+          <p class="api-note">图谱构建完成后进入预览</p>
+          <p class="description">图谱构建已完成，请进入下一步进行图谱预览确认</p>
           <button 
             class="action-btn" 
-            :disabled="currentPhase < 2 || creatingSimulation"
+            :disabled="currentPhase < 2"
             @click="handleEnterEnvSetup"
           >
-            <span v-if="creatingSimulation" class="spinner-sm"></span>
-            {{ creatingSimulation ? '创建中...' : '进入环境搭建 ➝' }}
+            进入图谱预览 ➝
           </button>
         </div>
       </div>
@@ -189,7 +188,6 @@
 <script setup>
 import { computed, ref, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
-import { createSimulation } from '../api/simulation'
 
 const router = useRouter()
 
@@ -202,45 +200,14 @@ const props = defineProps({
   systemLogs: { type: Array, default: () => [] }
 })
 
-defineEmits(['next-step'])
+const emit = defineEmits(['next-step'])
 
 const selectedOntologyItem = ref(null)
 const logContent = ref(null)
-const creatingSimulation = ref(false)
 
-// 进入环境搭建 - 创建 simulation 并跳转
-const handleEnterEnvSetup = async () => {
-  if (!props.projectData?.project_id || !props.projectData?.graph_id) {
-    console.error('缺少项目或图谱信息')
-    return
-  }
-  
-  creatingSimulation.value = true
-  
-  try {
-    const res = await createSimulation({
-      project_id: props.projectData.project_id,
-      graph_id: props.projectData.graph_id,
-      enable_twitter: true,
-      enable_reddit: true
-    })
-    
-    if (res.success && res.data?.simulation_id) {
-      // 跳转到 simulation 页面
-      router.push({
-        name: 'Simulation',
-        params: { simulationId: res.data.simulation_id }
-      })
-    } else {
-      console.error('创建模拟失败:', res.error)
-      alert('创建模拟失败: ' + (res.error || '未知错误'))
-    }
-  } catch (err) {
-    console.error('创建模拟异常:', err)
-    alert('创建模拟异常: ' + err.message)
-  } finally {
-    creatingSimulation.value = false
-  }
+// 进入图谱预览 - 直接 emit next-step
+const handleEnterEnvSetup = () => {
+  emit('next-step')
 }
 
 const selectOntologyItem = (item, type) => {

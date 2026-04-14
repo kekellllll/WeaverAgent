@@ -56,5 +56,8 @@ backend/logs/
 # 上传文件
 backend/uploads/
 
+# RAG 向量索引（本地生成）
+backend/rag_index/
+
 # Docker 数据
 data/

@@ -21,7 +21,7 @@
     <div v-if="projects.length > 0" class="cards-container" :class="{ expanded: isExpanded }" :style="containerStyle">
       <div 
         v-for="(project, index) in projects" 
-        :key="project.simulation_id"
+        :key="project.project_id"
         class="project-card"
         :class="{ expanded: isExpanded, hovering: hoveringCard === index }"
         :style="getCardStyle(index)"
@@ -29,9 +29,9 @@
         @mouseleave="hoveringCard = null"
         @click="navigateToProject(project)"
       >
-        <!-- 卡片头部：simulation_id 和 功能可用状态 -->
+        <!-- 卡片头部：project_id 和 功能可用状态 -->
         <div class="card-header">
-          <span class="card-id">{{ formatSimulationId(project.simulation_id) }}</span>
+          <span class="card-id">{{ formatProjectId(project.project_id) }}</span>
           <div class="card-status-icons">
             <span 
               class="status-icon" 
@@ -77,11 +77,11 @@
           </div>
         </div>
 
-        <!-- 卡片标题（使用模拟需求的前20字作为标题） -->
-        <h3 class="card-title">{{ getSimulationTitle(project.simulation_requirement) }}</h3>
+        <!-- 卡片标题（使用分析需求的前20字作为标题） -->
+        <h3 class="card-title">{{ getAnalysisTitle(project.analysis_requirement) }}</h3>
 
-        <!-- 卡片描述（模拟需求完整展示） -->
-        <p class="card-desc">{{ truncateText(project.simulation_requirement, 55) }}</p>
+        <!-- 卡片描述（分析需求完整展示） -->
+        <p class="card-desc">{{ truncateText(project.analysis_requirement, 55) }}</p>
 
         <!-- 卡片底部 -->
         <div class="card-footer">
@@ -89,8 +89,8 @@
             <span class="card-date">{{ formatDate(project.created_at) }}</span>
             <span class="card-time">{{ formatTime(project.created_at) }}</span>
           </div>
-          <span class="card-progress" :class="getProgressClass(project)">
-            <span class="status-dot">●</span> {{ formatRounds(project) }}
+          <span class="card-progress">
+            <span class="status-dot">●</span> {{ project.status || '已建档' }}
           </span>
         </div>
         
@@ -113,9 +113,9 @@
             <!-- 弹窗头部 -->
             <div class="modal-header">
               <div class="modal-title-section">
-                <span class="modal-id">{{ formatSimulationId(selectedProject.simulation_id) }}</span>
-                <span class="modal-progress" :class="getProgressClass(selectedProject)">
-                  <span class="status-dot">●</span> {{ formatRounds(selectedProject) }}
+                <span class="modal-id">{{ formatProjectId(selectedProject.project_id) }}</span>
+                <span class="modal-progress">
+                  <span class="status-dot">●</span> {{ selectedProject.status || '已建档' }}
                 </span>
                 <span class="modal-create-time">{{ formatDate(selectedProject.created_at) }} {{ formatTime(selectedProject.created_at) }}</span>
               </div>
@@ -124,10 +124,10 @@
 
             <!-- 弹窗内容 -->
             <div class="modal-body">
-              <!-- 模拟需求 -->
+              <!-- 分析需求 -->
               <div class="modal-section">
-                <div class="modal-label">模拟需求</div>
-                <div class="modal-requirement">{{ selectedProject.simulation_requirement || '无' }}</div>
+                <div class="modal-label">分析需求</div>
+                <div class="modal-requirement">{{ selectedProject.analysis_requirement || '无' }}</div>
               </div>
 
               <!-- 文件列表 -->
@@ -161,9 +161,9 @@
                 <span class="btn-icon">◇</span>
                 <span class="btn-text">图谱构建</span>
               </button>
-              <button 
-                class="modal-btn btn-simulation" 
-                @click="goToSimulation"
+              <button
+                class="modal-btn btn-project"
+                @click="goToProject"
               >
                 <span class="btn-step">Step2</span>
                 <span class="btn-icon">◈</span>
@@ -181,7 +181,7 @@
             </div>
             <!-- 不可回放提示 -->
             <div class="modal-playback-hint">
-              <span class="hint-text">Step3「开始模拟」与 Step5「深度互动」需在运行中启动，不支持历史回放</span>
+              <span class="hint-text">Step3「开始分析」与 Step5「深度互动」需在运行中启动，不支持历史回放</span>
             </div>
           </div>
         </div>
@@ -193,7 +193,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, onActivated, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { getSimulationHistory } from '../api/simulation'
+import { listProjects } from '../api/graph'
 
 const router = useRouter()
 const route = useRoute()
@@ -289,10 +289,10 @@ const getCardStyle = (index) => {
 }
 
 // 根据轮数进度获取样式类
-const getProgressClass = (simulation) => {
-  const current = simulation.current_round || 0
-  const total = simulation.total_rounds || 0
-  
+const getProgressClass = (project) => {
+  const current = project.current_round || 0
+  const total = project.total_rounds || 0
+
   if (total === 0 || current === 0) {
     // 未开始
     return 'not-started'
@@ -335,24 +335,24 @@ const truncateText = (text, maxLength) => {
   return text.length > maxLength ? text.slice(0, maxLength) + '...' : text
 }
 
-// 从模拟需求生成标题（取前20字）
-const getSimulationTitle = (requirement) => {
-  if (!requirement) return '未命名模拟'
+// 从分析需求生成标题（取前20字）
+const getAnalysisTitle = (requirement) => {
+  if (!requirement) return '未命名分析'
   const title = requirement.slice(0, 20)
   return requirement.length > 20 ? title + '...' : title
 }
 
-// 格式化 simulation_id 显示（截取前6位）
-const formatSimulationId = (simulationId) => {
-  if (!simulationId) return 'SIM_UNKNOWN'
-  const prefix = simulationId.replace('sim_', '').slice(0, 6)
-  return `SIM_${prefix.toUpperCase()}`
+// 格式化 project_id 显示（截取前6位）
+const formatProjectId = (projectId) => {
+  if (!projectId) return 'PROJ_??????'
+  const prefix = projectId.replace('proj_', '').slice(0, 6)
+  return `PROJ_${prefix.toUpperCase()}`
 }
 
 // 格式化轮数显示（当前轮/总轮数）
-const formatRounds = (simulation) => {
-  const current = simulation.current_round || 0
-  const total = simulation.total_rounds || 0
+const formatRounds = (project) => {
+  const current = project.current_round || 0
+  const total = project.total_rounds || 0
   if (total === 0) return '未开始'
   return `${current}/${total} 轮`
 }
@@ -392,8 +392,8 @@ const truncateFilename = (filename, maxLength) => {
 }
 
 // 打开项目详情弹窗
-const navigateToProject = (simulation) => {
-  selectedProject.value = simulation
+const navigateToProject = (project) => {
+  selectedProject.value = project
 }
 
 // 关闭弹窗
@@ -412,23 +412,12 @@ const goToProject = () => {
   }
 }
 
-// 导航到环境配置页面（Simulation）
-const goToSimulation = () => {
-  if (selectedProject.value?.simulation_id) {
-    router.push({
-      name: 'Simulation',
-      params: { simulationId: selectedProject.value.simulation_id }
-    })
-    closeModal()
-  }
-}
-
 // 导航到分析报告页面（Report）
 const goToReport = () => {
-  if (selectedProject.value?.report_id) {
+  if (selectedProject.value?.project_id) {
     router.push({
-      name: 'Report',
-      params: { reportId: selectedProject.value.report_id }
+      name: 'Process',
+      params: { projectId: selectedProject.value.project_id }
     })
     closeModal()
   }
@@ -438,9 +427,11 @@ const goToReport = () => {
 const loadHistory = async () => {
   try {
     loading.value = true
-    const response = await getSimulationHistory(20)
-    if (response.success) {
-      projects.value = response.data || []
+    const response = await listProjects(20)
+    if (response.data?.success) {
+      projects.value = response.data.data || []
+    } else if (Array.isArray(response.data)) {
+      projects.value = response.data
     }
   } catch (error) {
     console.error('加载历史项目失败:', error)
@@ -1312,8 +1303,7 @@ onUnmounted(() => {
   color: #4B5563;
 }
 
-.modal-btn.btn-project .btn-icon { color: #3B82F6; }
-.modal-btn.btn-simulation .btn-icon { color: #F59E0B; }
+.modal-btn.btn-project .btn-icon { color: #F59E0B; }
 .modal-btn.btn-report .btn-icon { color: #10B981; }
 
 .modal-btn:hover:not(:disabled) .btn-text {

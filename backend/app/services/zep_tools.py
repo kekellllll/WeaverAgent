@@ -1,11 +1,14 @@
 """
 Zep检索工具服务
-封装图谱搜索、节点读取、边查询等工具，供Report Agent使用
+封装图谱搜索、节点读取、边查询等工具，供 Report Agent 使用
 
-核心检索工具（优化后）：
+完整检索流程：
+  LLM抽取实体关系 → Zep Cloud构建GraphRAG → 同步到本地Neo4j → 使用自有检索方法
+
+核心检索工具：
 1. InsightForge（深度洞察检索）- 最强大的混合检索，自动生成子问题并多维度检索
-2. PanoramaSearch（广度搜索）- 获取全貌，包括过期内容
-3. QuickSearch（简单搜索）- 快速检索
+2. PanoramaSearch（广度搜索）- 获取知识图谱全貌，包括历史版本
+3. QuickSearch（快速检索）- 轻量级直接检索
 """
 
 import time
@@ -20,7 +23,7 @@ from ..utils.logger import get_logger
 from ..utils.llm_client import LLMClient
 from ..utils.zep_paging import fetch_all_nodes, fetch_all_edges
 
-logger = get_logger('mirofish.zep_tools')
+logger = get_logger('weaveragent.zep_tools')
 
 
 @dataclass
@@ -141,7 +144,7 @@ class InsightForgeResult:
     包含多个子问题的检索结果，以及综合分析
     """
     query: str
-    simulation_requirement: str
+    analysis_requirement: str        # 分析主题/需求描述
     sub_queries: List[str]
     
     # 各维度检索结果
@@ -157,7 +160,7 @@ class InsightForgeResult:
     def to_dict(self) -> Dict[str, Any]:
         return {
             "query": self.query,
-            "simulation_requirement": self.simulation_requirement,
+            "analysis_requirement": self.analysis_requirement,
             "sub_queries": self.sub_queries,
             "semantic_facts": self.semantic_facts,
             "entity_insights": self.entity_insights,
@@ -170,11 +173,11 @@ class InsightForgeResult:
     def to_text(self) -> str:
         """转换为详细的文本格式，供LLM理解"""
         text_parts = [
-            f"## 未来预测深度分析",
+            f"## 学术文献深度分析",
             f"分析问题: {self.query}",
-            f"预测场景: {self.simulation_requirement}",
-            f"\n### 预测数据统计",
-            f"- 相关预测事实: {self.total_facts}条",
+            f"分析主题: {self.analysis_requirement}",
+            f"\n### 文献数据统计",
+            f"- 相关文献事实: {self.total_facts}条",
             f"- 涉及实体: {self.total_entities}个",
             f"- 关系链: {self.total_relationships}条"
         ]
@@ -187,7 +190,7 @@ class InsightForgeResult:
         
         # 语义搜索结果
         if self.semantic_facts:
-            text_parts.append(f"\n### 【关键事实】(请在报告中引用这些原文)")
+            text_parts.append(f"\n### 【关键文献事实】(请在报告中引用这些原文)")
             for i, fact in enumerate(self.semantic_facts, 1):
                 text_parts.append(f"{i}. \"{fact}\"")
         
@@ -199,7 +202,7 @@ class InsightForgeResult:
                 if entity.get('summary'):
                     text_parts.append(f"  摘要: \"{entity.get('summary')}\"")
                 if entity.get('related_facts'):
-                    text_parts.append(f"  相关事实: {len(entity.get('related_facts', []))}条")
+                    text_parts.append(f"  相关文献事实: {len(entity.get('related_facts', []))}条")
         
         # 关系链
         if self.relationship_chains:
@@ -249,7 +252,7 @@ class PanoramaResult:
     def to_text(self) -> str:
         """转换为文本格式（完整版本，不截断）"""
         text_parts = [
-            f"## 广度搜索结果（未来全景视图）",
+            f"## 广度搜索结果（知识图谱全景视图）",
             f"查询: {self.query}",
             f"\n### 统计信息",
             f"- 总节点数: {self.total_nodes}",
@@ -260,13 +263,13 @@ class PanoramaResult:
         
         # 当前有效的事实（完整输出，不截断）
         if self.active_facts:
-            text_parts.append(f"\n### 【当前有效事实】(模拟结果原文)")
+            text_parts.append(f"\n### 【当前有效图谱事实】")
             for i, fact in enumerate(self.active_facts, 1):
                 text_parts.append(f"{i}. \"{fact}\"")
         
         # 历史/过期事实（完整输出，不截断）
         if self.historical_facts:
-            text_parts.append(f"\n### 【历史/过期事实】(演变过程记录)")
+            text_parts.append(f"\n### 【历史/版本事实】(早期版本记录)")
             for i, fact in enumerate(self.historical_facts, 1):
                 text_parts.append(f"{i}. \"{fact}\"")
         
@@ -399,22 +402,25 @@ class InterviewResult:
 
 class ZepToolsService:
     """
-    Zep检索工具服务
-    
-    【核心检索工具 - 优化后】
-    1. insight_forge - 深度洞察检索（最强大，自动生成子问题，多维度检索）
-    2. panorama_search - 广度搜索（获取全貌，包括过期内容）
-    3. quick_search - 简单搜索（快速检索）
-    4. interview_agents - 深度采访（采访模拟Agent，获取多视角观点）
-    
+    Zep 检索工具服务
+
+    【完整检索流程】
+    LLM抽取实体关系 → Zep Cloud构建GraphRAG → 同步到本地Neo4j → 使用自有检索方法
+
+    【核心检索工具】
+    1. insight_forge     - 深度洞察检索（最强大，自动生成子问题，多维度检索）
+    2. panorama_search   - 广度搜索（获取知识图谱全貌，含历史版本）
+    3. quick_search      - 快速检索（轻量级）
+    4. deep_entity_query - 学术实体深度查询（按实体类型展开关联文献）
+
     【基础工具】
-    - search_graph - 图谱语义搜索
-    - get_all_nodes - 获取图谱所有节点
-    - get_all_edges - 获取图谱所有边（含时间信息）
-    - get_node_detail - 获取节点详细信息
-    - get_node_edges - 获取节点相关的边
-    - get_entities_by_type - 按类型获取实体
-    - get_entity_summary - 获取实体的关系摘要
+    - search_graph        - 图谱语义搜索（Zep Cloud + 本地Neo4j降级）
+    - get_all_nodes       - 获取图谱所有节点
+    - get_all_edges       - 获取图谱所有边（含时间信息）
+    - get_node_detail     - 获取节点详细信息
+    - get_node_edges      - 获取节点相关的边
+    - get_entities_by_type- 按类型获取实体
+    - get_entity_summary  - 获取实体的关系摘要
     """
     
     # 重试配置
@@ -887,40 +893,40 @@ class ZepToolsService:
             "relation_types": relation_types
         }
     
-    def get_simulation_context(
-        self, 
+    def get_analysis_context(
+        self,
         graph_id: str,
-        simulation_requirement: str,
+        analysis_requirement: str,
         limit: int = 30
     ) -> Dict[str, Any]:
         """
-        获取模拟相关的上下文信息
-        
-        综合搜索与模拟需求相关的所有信息
-        
+        获取学术分析相关的上下文信息
+
+        从知识图谱中综合搜索与分析主题相关的所有实体、关系和事实。
+
         Args:
             graph_id: 图谱ID
-            simulation_requirement: 模拟需求描述
+            analysis_requirement: 分析主题描述（如"Transformer在NLP中的应用"）
             limit: 每类信息的数量限制
-            
+
         Returns:
-            模拟上下文信息
+            包含 related_facts、graph_statistics、entities 的上下文字典
         """
-        logger.info(f"获取模拟上下文: {simulation_requirement[:50]}...")
-        
-        # 搜索与模拟需求相关的信息
+        logger.info(f"获取学术分析上下文: {analysis_requirement[:50]}...")
+
+        # 搜索与分析主题相关的信息
         search_result = self.search_graph(
             graph_id=graph_id,
-            query=simulation_requirement,
+            query=analysis_requirement,
             limit=limit
         )
-        
+
         # 获取图谱统计
         stats = self.get_graph_statistics(graph_id)
-        
+
         # 获取所有实体节点
         all_nodes = self.get_all_nodes(graph_id)
-        
+
         # 筛选有实际类型的实体（非纯Entity节点）
         entities = []
         for node in all_nodes:
@@ -931,14 +937,18 @@ class ZepToolsService:
                     "type": custom_labels[0],
                     "summary": node.summary
                 })
-        
+
         return {
-            "simulation_requirement": simulation_requirement,
+            "analysis_requirement": analysis_requirement,
             "related_facts": search_result.facts,
             "graph_statistics": stats,
-            "entities": entities[:limit],  # 限制数量
+            "entities": entities[:limit],
             "total_entities": len(entities)
         }
+
+    # 向后兼容：旧名称别名
+    def get_simulation_context(self, graph_id: str, simulation_requirement: str, limit: int = 30) -> Dict[str, Any]:
+        return self.get_analysis_context(graph_id, simulation_requirement, limit)
     
     # ========== 核心检索工具（优化后） ==========
     
@@ -946,42 +956,42 @@ class ZepToolsService:
         self,
         graph_id: str,
         query: str,
-        simulation_requirement: str,
+        analysis_requirement: str,
         report_context: str = "",
         max_sub_queries: int = 5
     ) -> InsightForgeResult:
         """
         【InsightForge - 深度洞察检索】
-        
-        最强大的混合检索函数，自动分解问题并多维度检索：
+
+        最强大的混合检索函数，自动分解问题并多维度检索学术知识图谱：
         1. 使用LLM将问题分解为多个子问题
-        2. 对每个子问题进行语义搜索
-        3. 提取相关实体并获取其详细信息
-        4. 追踪关系链
+        2. 对每个子问题进行语义搜索（Zep Cloud + 本地Neo4j）
+        3. 提取相关实体（Paper/Method/Dataset/Author等）并获取详细信息
+        4. 追踪关系链（PROPOSES/EVALUATES_ON/ACHIEVES等）
         5. 整合所有结果，生成深度洞察
-        
+
         Args:
             graph_id: 图谱ID
             query: 用户问题
-            simulation_requirement: 模拟需求描述
+            analysis_requirement: 分析主题描述
             report_context: 报告上下文（可选，用于更精准的子问题生成）
             max_sub_queries: 最大子问题数量
-            
+
         Returns:
             InsightForgeResult: 深度洞察检索结果
         """
         logger.info(f"InsightForge 深度洞察检索: {query[:50]}...")
-        
+
         result = InsightForgeResult(
             query=query,
-            simulation_requirement=simulation_requirement,
+            analysis_requirement=analysis_requirement,
             sub_queries=[]
         )
-        
+
         # Step 1: 使用LLM生成子问题
         sub_queries = self._generate_sub_queries(
             query=query,
-            simulation_requirement=simulation_requirement,
+            analysis_requirement=analysis_requirement,
             report_context=report_context,
             max_queries=max_sub_queries
         )
@@ -1092,29 +1102,31 @@ class ZepToolsService:
     def _generate_sub_queries(
         self,
         query: str,
-        simulation_requirement: str,
+        analysis_requirement: str,
         report_context: str = "",
         max_queries: int = 5
     ) -> List[str]:
         """
-        使用LLM生成子问题
-        
-        将复杂问题分解为多个可以独立检索的子问题
+        使用LLM将学术问题分解为多个可独立检索的子问题
+
+        针对学术论文知识图谱场景，从不同维度展开检索：
+        方法、数据集、性能指标、对比基线、作者贡献等
         """
-        system_prompt = """你是一个专业的问题分析专家。你的任务是将一个复杂问题分解为多个可以在模拟世界中独立观察的子问题。
+        system_prompt = """你是一个学术文献分析专家。你的任务是将一个关于学术论文知识图谱的复杂问题，
+分解为多个可以在知识图谱中独立检索的子问题。
 
 要求：
-1. 每个子问题应该足够具体，可以在模拟世界中找到相关的Agent行为或事件
-2. 子问题应该覆盖原问题的不同维度（如：谁、什么、为什么、怎么样、何时、何地）
-3. 子问题应该与模拟场景相关
+1. 子问题应覆盖不同维度：方法/模型、数据集、性能指标、对比基线、作者/团队、应用任务等
+2. 每个子问题应足够具体，可以直接在图谱中检索到对应的节点或边
+3. 子问题应与原始分析主题紧密相关
 4. 返回JSON格式：{"sub_queries": ["子问题1", "子问题2", ...]}"""
 
-        user_prompt = f"""模拟需求背景：
-{simulation_requirement}
+        user_prompt = f"""分析主题背景：
+{analysis_requirement}
 
 {f"报告上下文：{report_context[:500]}" if report_context else ""}
 
-请将以下问题分解为{max_queries}个子问题：
+请将以下学术问题分解为{max_queries}个子问题，覆盖不同检索维度：
 {query}
 
 返回JSON格式的子问题列表。"""
@@ -1127,19 +1139,17 @@ class ZepToolsService:
                 ],
                 temperature=0.3
             )
-            
+
             sub_queries = response.get("sub_queries", [])
-            # 确保是字符串列表
             return [str(sq) for sq in sub_queries[:max_queries]]
-            
+
         except Exception as e:
             logger.warning(f"生成子问题失败: {str(e)}，使用默认子问题")
-            # 降级：返回基于原问题的变体
             return [
                 query,
-                f"{query} 的主要参与者",
-                f"{query} 的原因和影响",
-                f"{query} 的发展过程"
+                f"{query} 涉及的核心方法和模型",
+                f"{query} 使用的数据集和评测指标",
+                f"{query} 相关的对比基线"
             ][:max_queries]
     
     def panorama_search(
@@ -1269,467 +1279,106 @@ class ZepToolsService:
         logger.info(f"QuickSearch完成: {result.total_count}条结果")
         return result
     
-    def interview_agents(
+    def deep_entity_query(
         self,
-        simulation_id: str,
-        interview_requirement: str,
-        simulation_requirement: str = "",
-        max_agents: int = 5,
-        custom_questions: List[str] = None
+        graph_id: str,
+        entity_type: str,
+        query: str = "",
+        max_entities: int = 5
     ) -> InterviewResult:
         """
-        【InterviewAgents - 深度采访】
-        
-        调用真实的OASIS采访API，采访模拟中正在运行的Agent：
-        1. 自动读取人设文件，了解所有模拟Agent
-        2. 使用LLM分析采访需求，智能选择最相关的Agent
-        3. 使用LLM生成采访问题
-        4. 调用 /api/simulation/interview/batch 接口进行真实采访（双平台同时采访）
-        5. 整合所有采访结果，生成采访报告
-        
-        【重要】此功能需要模拟环境处于运行状态（OASIS环境未关闭）
-        
-        【使用场景】
-        - 需要从不同角色视角了解事件看法
-        - 需要收集多方意见和观点
-        - 需要获取模拟Agent的真实回答（非LLM模拟）
-        
+        【DeepEntityQuery - 学术实体深度查询】
+
+        按实体类型展开关联文献的深度查询：
+        1. 按类型检索图谱中的节点（Paper/Method/Dataset/Author/Metric等）
+        2. 对每个节点做1-hop邻居扩展，收集所有关联边事实
+        3. 整合摘要，生成该类型实体的结构化全景分析
+
+        【适用场景】
+        - 需要了解某类实体（如所有方法Method）的全貌
+        - 需要追踪特定论文引用了哪些数据集
+        - 需要展示某个指标Metric被哪些工作评测
+
         Args:
-            simulation_id: 模拟ID（用于定位人设文件和调用采访API）
-            interview_requirement: 采访需求描述（非结构化，如"了解学生对事件的看法"）
-            simulation_requirement: 模拟需求背景（可选）
-            max_agents: 最多采访的Agent数量
-            custom_questions: 自定义采访问题（可选，若不提供则自动生成）
-            
+            graph_id: 图谱ID
+            entity_type: 实体类型（Paper/Method/Dataset/Author/Metric/Task/Innovation/Baseline）
+            query: 额外过滤条件（可选，留空表示获取该类型全部实体）
+            max_entities: 最多展开的实体数量
+
         Returns:
-            InterviewResult: 采访结果
+            InterviewResult: 复用采访结果结构承载实体深度分析
         """
-        from .simulation_runner import SimulationRunner
-        
-        logger.info(f"InterviewAgents 深度采访（真实API）: {interview_requirement[:50]}...")
-        
+        logger.info(f"DeepEntityQuery: entity_type={entity_type}, query={query[:40]}...")
+
         result = InterviewResult(
-            interview_topic=interview_requirement,
-            interview_questions=custom_questions or []
+            interview_topic=f"{entity_type} 实体深度分析",
+            interview_questions=[query] if query else []
         )
-        
-        # Step 1: 读取人设文件
-        profiles = self._load_agent_profiles(simulation_id)
-        
-        if not profiles:
-            logger.warning(f"未找到模拟 {simulation_id} 的人设文件")
-            result.summary = "未找到可采访的Agent人设文件"
+
+        # Step 1: 按类型获取节点
+        typed_nodes = self.get_entities_by_type(graph_id, entity_type)
+        result.total_agents = len(typed_nodes)
+
+        if not typed_nodes:
+            result.summary = f"图谱中未找到类型为 {entity_type} 的实体"
             return result
-        
-        result.total_agents = len(profiles)
-        logger.info(f"加载到 {len(profiles)} 个Agent人设")
-        
-        # Step 2: 使用LLM选择要采访的Agent（返回agent_id列表）
-        selected_agents, selected_indices, selection_reasoning = self._select_agents_for_interview(
-            profiles=profiles,
-            interview_requirement=interview_requirement,
-            simulation_requirement=simulation_requirement,
-            max_agents=max_agents
-        )
-        
-        result.selected_agents = selected_agents
-        result.selection_reasoning = selection_reasoning
-        logger.info(f"选择了 {len(selected_agents)} 个Agent进行采访: {selected_indices}")
-        
-        # Step 3: 生成采访问题（如果没有提供）
-        if not result.interview_questions:
-            result.interview_questions = self._generate_interview_questions(
-                interview_requirement=interview_requirement,
-                simulation_requirement=simulation_requirement,
-                selected_agents=selected_agents
-            )
-            logger.info(f"生成了 {len(result.interview_questions)} 个采访问题")
-        
-        # 将问题合并为一个采访prompt
-        combined_prompt = "\n".join([f"{i+1}. {q}" for i, q in enumerate(result.interview_questions)])
-        
-        # 添加优化前缀，约束Agent回复格式
-        INTERVIEW_PROMPT_PREFIX = (
-            "你正在接受一次采访。请结合你的人设、所有的过往记忆与行动，"
-            "以纯文本方式直接回答以下问题。\n"
-            "回复要求：\n"
-            "1. 直接用自然语言回答，不要调用任何工具\n"
-            "2. 不要返回JSON格式或工具调用格式\n"
-            "3. 不要使用Markdown标题（如#、##、###）\n"
-            "4. 按问题编号逐一回答，每个回答以「问题X：」开头（X为问题编号）\n"
-            "5. 每个问题的回答之间用空行分隔\n"
-            "6. 回答要有实质内容，每个问题至少回答2-3句话\n\n"
-        )
-        optimized_prompt = f"{INTERVIEW_PROMPT_PREFIX}{combined_prompt}"
-        
-        # Step 4: 调用真实的采访API（不指定platform，默认双平台同时采访）
-        try:
-            # 构建批量采访列表（不指定platform，双平台采访）
-            interviews_request = []
-            for agent_idx in selected_indices:
-                interviews_request.append({
-                    "agent_id": agent_idx,
-                    "prompt": optimized_prompt  # 使用优化后的prompt
-                    # 不指定platform，API会在twitter和reddit两个平台都采访
-                })
-            
-            logger.info(f"调用批量采访API（双平台）: {len(interviews_request)} 个Agent")
-            
-            # 调用 SimulationRunner 的批量采访方法（不传platform，双平台采访）
-            api_result = SimulationRunner.interview_agents_batch(
-                simulation_id=simulation_id,
-                interviews=interviews_request,
-                platform=None,  # 不指定platform，双平台采访
-                timeout=180.0   # 双平台需要更长超时
-            )
-            
-            logger.info(f"采访API返回: {api_result.get('interviews_count', 0)} 个结果, success={api_result.get('success')}")
-            
-            # 检查API调用是否成功
-            if not api_result.get("success", False):
-                error_msg = api_result.get("error", "未知错误")
-                logger.warning(f"采访API返回失败: {error_msg}")
-                result.summary = f"采访API调用失败：{error_msg}。请检查OASIS模拟环境状态。"
-                return result
-            
-            # Step 5: 解析API返回结果，构建AgentInterview对象
-            # 双平台模式返回格式: {"twitter_0": {...}, "reddit_0": {...}, "twitter_1": {...}, ...}
-            api_data = api_result.get("result", {})
-            results_dict = api_data.get("results", {}) if isinstance(api_data, dict) else {}
-            
-            for i, agent_idx in enumerate(selected_indices):
-                agent = selected_agents[i]
-                agent_name = agent.get("realname", agent.get("username", f"Agent_{agent_idx}"))
-                agent_role = agent.get("profession", "未知")
-                agent_bio = agent.get("bio", "")
-                
-                # 获取该Agent在两个平台的采访结果
-                twitter_result = results_dict.get(f"twitter_{agent_idx}", {})
-                reddit_result = results_dict.get(f"reddit_{agent_idx}", {})
-                
-                twitter_response = twitter_result.get("response", "")
-                reddit_response = reddit_result.get("response", "")
 
-                # 清理可能的工具调用 JSON 包裹
-                twitter_response = self._clean_tool_call_response(twitter_response)
-                reddit_response = self._clean_tool_call_response(reddit_response)
+        # Step 2: 如有 query，做相关性过滤排序
+        if query:
+            query_lower = query.lower()
+            def relevance(node: NodeInfo) -> int:
+                score = 0
+                if query_lower in node.name.lower():
+                    score += 100
+                if node.summary and query_lower in node.summary.lower():
+                    score += 50
+                return score
+            typed_nodes = sorted(typed_nodes, key=relevance, reverse=True)
 
-                # 始终输出双平台标记
-                twitter_text = twitter_response if twitter_response else "（该平台未获得回复）"
-                reddit_text = reddit_response if reddit_response else "（该平台未获得回复）"
-                response_text = f"【Twitter平台回答】\n{twitter_text}\n\n【Reddit平台回答】\n{reddit_text}"
+        # 取前 max_entities 个展开
+        nodes_to_expand = typed_nodes[:max_entities]
+        result.selected_agents = [{"name": n.name, "type": entity_type, "summary": n.summary} for n in nodes_to_expand]
 
-                # 提取关键引言（从两个平台的回答中）
-                import re
-                combined_responses = f"{twitter_response} {reddit_response}"
-
-                # 清理响应文本：去掉标记、编号、Markdown 等干扰
-                clean_text = re.sub(r'#{1,6}\s+', '', combined_responses)
-                clean_text = re.sub(r'\{[^}]*tool_name[^}]*\}', '', clean_text)
-                clean_text = re.sub(r'[*_`|>~\-]{2,}', '', clean_text)
-                clean_text = re.sub(r'问题\d+[：:]\s*', '', clean_text)
-                clean_text = re.sub(r'【[^】]+】', '', clean_text)
-
-                # 策略1（主）: 提取完整的有实质内容的句子
-                sentences = re.split(r'[。！？]', clean_text)
-                meaningful = [
-                    s.strip() for s in sentences
-                    if 20 <= len(s.strip()) <= 150
-                    and not re.match(r'^[\s\W，,；;：:、]+', s.strip())
-                    and not s.strip().startswith(('{', '问题'))
-                ]
-                meaningful.sort(key=len, reverse=True)
-                key_quotes = [s + "。" for s in meaningful[:3]]
-
-                # 策略2（补充）: 正确配对的中文引号「」内长文本
-                if not key_quotes:
-                    paired = re.findall(r'\u201c([^\u201c\u201d]{15,100})\u201d', clean_text)
-                    paired += re.findall(r'\u300c([^\u300c\u300d]{15,100})\u300d', clean_text)
-                    key_quotes = [q for q in paired if not re.match(r'^[，,；;：:、]', q)][:3]
-                
-                interview = AgentInterview(
-                    agent_name=agent_name,
-                    agent_role=agent_role,
-                    agent_bio=agent_bio[:1000],  # 扩大bio长度限制
-                    question=combined_prompt,
-                    response=response_text,
-                    key_quotes=key_quotes[:5]
-                )
-                result.interviews.append(interview)
-            
-            result.interviewed_count = len(result.interviews)
-            
-        except ValueError as e:
-            # 模拟环境未运行
-            logger.warning(f"采访API调用失败（环境未运行？）: {e}")
-            result.summary = f"采访失败：{str(e)}。模拟环境可能已关闭，请确保OASIS环境正在运行。"
-            return result
-        except Exception as e:
-            logger.error(f"采访API调用异常: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
-            result.summary = f"采访过程发生错误：{str(e)}"
-            return result
-        
-        # Step 6: 生成采访摘要
-        if result.interviews:
-            result.summary = self._generate_interview_summary(
-                interviews=result.interviews,
-                interview_requirement=interview_requirement
-            )
-        
-        logger.info(f"InterviewAgents完成: 采访了 {result.interviewed_count} 个Agent（双平台）")
-        return result
-    
-    @staticmethod
-    def _clean_tool_call_response(response: str) -> str:
-        """清理 Agent 回复中的 JSON 工具调用包裹，提取实际内容"""
-        if not response or not response.strip().startswith('{'):
-            return response
-        text = response.strip()
-        if 'tool_name' not in text[:80]:
-            return response
-        import re as _re
-        try:
-            data = json.loads(text)
-            if isinstance(data, dict) and 'arguments' in data:
-                for key in ('content', 'text', 'body', 'message', 'reply'):
-                    if key in data['arguments']:
-                        return str(data['arguments'][key])
-        except (json.JSONDecodeError, KeyError, TypeError):
-            match = _re.search(r'"content"\s*:\s*"((?:[^"\\]|\\.)*)"', text)
-            if match:
-                return match.group(1).replace('\\n', '\n').replace('\\"', '"')
-        return response
-
-    def _load_agent_profiles(self, simulation_id: str) -> List[Dict[str, Any]]:
-        """加载模拟的Agent人设文件"""
-        import os
-        import csv
-        
-        # 构建人设文件路径
-        sim_dir = os.path.join(
-            os.path.dirname(__file__), 
-            f'../../uploads/simulations/{simulation_id}'
-        )
-        
-        profiles = []
-        
-        # 优先尝试读取Reddit JSON格式
-        reddit_profile_path = os.path.join(sim_dir, "reddit_profiles.json")
-        if os.path.exists(reddit_profile_path):
-            try:
-                with open(reddit_profile_path, 'r', encoding='utf-8') as f:
-                    profiles = json.load(f)
-                logger.info(f"从 reddit_profiles.json 加载了 {len(profiles)} 个人设")
-                return profiles
-            except Exception as e:
-                logger.warning(f"读取 reddit_profiles.json 失败: {e}")
-        
-        # 尝试读取Twitter CSV格式
-        twitter_profile_path = os.path.join(sim_dir, "twitter_profiles.csv")
-        if os.path.exists(twitter_profile_path):
-            try:
-                with open(twitter_profile_path, 'r', encoding='utf-8') as f:
-                    reader = csv.DictReader(f)
-                    for row in reader:
-                        # CSV格式转换为统一格式
-                        profiles.append({
-                            "realname": row.get("name", ""),
-                            "username": row.get("username", ""),
-                            "bio": row.get("description", ""),
-                            "persona": row.get("user_char", ""),
-                            "profession": "未知"
-                        })
-                logger.info(f"从 twitter_profiles.csv 加载了 {len(profiles)} 个人设")
-                return profiles
-            except Exception as e:
-                logger.warning(f"读取 twitter_profiles.csv 失败: {e}")
-        
-        return profiles
-    
-    def _select_agents_for_interview(
-        self,
-        profiles: List[Dict[str, Any]],
-        interview_requirement: str,
-        simulation_requirement: str,
-        max_agents: int
-    ) -> tuple:
-        """
-        使用LLM选择要采访的Agent
-        
-        Returns:
-            tuple: (selected_agents, selected_indices, reasoning)
-                - selected_agents: 选中Agent的完整信息列表
-                - selected_indices: 选中Agent的索引列表（用于API调用）
-                - reasoning: 选择理由
-        """
-        
-        # 构建Agent摘要列表
-        agent_summaries = []
-        for i, profile in enumerate(profiles):
-            summary = {
-                "index": i,
-                "name": profile.get("realname", profile.get("username", f"Agent_{i}")),
-                "profession": profile.get("profession", "未知"),
-                "bio": profile.get("bio", "")[:200],
-                "interested_topics": profile.get("interested_topics", [])
-            }
-            agent_summaries.append(summary)
-        
-        system_prompt = """你是一个专业的采访策划专家。你的任务是根据采访需求，从模拟Agent列表中选择最适合采访的对象。
-
-选择标准：
-1. Agent的身份/职业与采访主题相关
-2. Agent可能持有独特或有价值的观点
-3. 选择多样化的视角（如：支持方、反对方、中立方、专业人士等）
-4. 优先选择与事件直接相关的角色
-
-返回JSON格式：
-{
-    "selected_indices": [选中Agent的索引列表],
-    "reasoning": "选择理由说明"
-}"""
-
-        user_prompt = f"""采访需求：
-{interview_requirement}
-
-模拟背景：
-{simulation_requirement if simulation_requirement else "未提供"}
-
-可选择的Agent列表（共{len(agent_summaries)}个）：
-{json.dumps(agent_summaries, ensure_ascii=False, indent=2)}
-
-请选择最多{max_agents}个最适合采访的Agent，并说明选择理由。"""
-
-        try:
-            response = self.llm.chat_json(
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                temperature=0.3
-            )
-            
-            selected_indices = response.get("selected_indices", [])[:max_agents]
-            reasoning = response.get("reasoning", "基于相关性自动选择")
-            
-            # 获取选中的Agent完整信息
-            selected_agents = []
-            valid_indices = []
-            for idx in selected_indices:
-                if 0 <= idx < len(profiles):
-                    selected_agents.append(profiles[idx])
-                    valid_indices.append(idx)
-            
-            return selected_agents, valid_indices, reasoning
-            
-        except Exception as e:
-            logger.warning(f"LLM选择Agent失败，使用默认选择: {e}")
-            # 降级：选择前N个
-            selected = profiles[:max_agents]
-            indices = list(range(min(max_agents, len(profiles))))
-            return selected, indices, "使用默认选择策略"
-    
-    def _generate_interview_questions(
-        self,
-        interview_requirement: str,
-        simulation_requirement: str,
-        selected_agents: List[Dict[str, Any]]
-    ) -> List[str]:
-        """使用LLM生成采访问题"""
-        
-        agent_roles = [a.get("profession", "未知") for a in selected_agents]
-        
-        system_prompt = """你是一个专业的记者/采访者。根据采访需求，生成3-5个深度采访问题。
-
-问题要求：
-1. 开放性问题，鼓励详细回答
-2. 针对不同角色可能有不同答案
-3. 涵盖事实、观点、感受等多个维度
-4. 语言自然，像真实采访一样
-5. 每个问题控制在50字以内，简洁明了
-6. 直接提问，不要包含背景说明或前缀
-
-返回JSON格式：{"questions": ["问题1", "问题2", ...]}"""
-
-        user_prompt = f"""采访需求：{interview_requirement}
-
-模拟背景：{simulation_requirement if simulation_requirement else "未提供"}
-
-采访对象角色：{', '.join(agent_roles)}
-
-请生成3-5个采访问题。"""
-
-        try:
-            response = self.llm.chat_json(
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                temperature=0.5
-            )
-            
-            return response.get("questions", [f"关于{interview_requirement}，您有什么看法？"])
-            
-        except Exception as e:
-            logger.warning(f"生成采访问题失败: {e}")
-            return [
-                f"关于{interview_requirement}，您的观点是什么？",
-                "这件事对您或您所代表的群体有什么影响？",
-                "您认为应该如何解决或改进这个问题？"
+        # Step 3: 对每个节点做 1-hop 邻居扩展，收集边事实
+        for node in nodes_to_expand:
+            edges = self.get_node_edges(graph_id, node.uuid)
+            facts = [e.fact for e in edges if e.fact]
+            relation_list = [
+                f"{e.source_node_name or e.source_node_uuid[:8]} --[{e.name}]--> {e.target_node_name or e.target_node_uuid[:8]}"
+                for e in edges
             ]
-    
-    def _generate_interview_summary(
-        self,
-        interviews: List[AgentInterview],
-        interview_requirement: str
-    ) -> str:
-        """生成采访摘要"""
-        
-        if not interviews:
-            return "未完成任何采访"
-        
-        # 收集所有采访内容
-        interview_texts = []
-        for interview in interviews:
-            interview_texts.append(f"【{interview.agent_name}（{interview.agent_role}）】\n{interview.response[:500]}")
-        
-        system_prompt = """你是一个专业的新闻编辑。请根据多位受访者的回答，生成一份采访摘要。
+            response_text = f"**摘要:** {node.summary or '（无摘要）'}\n\n"
+            if facts:
+                response_text += "**关联事实:**\n" + "\n".join(f"- {f}" for f in facts[:10])
+            if relation_list:
+                response_text += "\n\n**关系链:**\n" + "\n".join(f"- {r}" for r in relation_list[:10])
 
-摘要要求：
-1. 提炼各方主要观点
-2. 指出观点的共识和分歧
-3. 突出有价值的引言
-4. 客观中立，不偏袒任何一方
-5. 控制在1000字内
-
-格式约束（必须遵守）：
-- 使用纯文本段落，用空行分隔不同部分
-- 不要使用Markdown标题（如#、##、###）
-- 不要使用分割线（如---、***）
-- 引用受访者原话时使用中文引号「」
-- 可以使用**加粗**标记关键词，但不要使用其他Markdown语法"""
-
-        user_prompt = f"""采访主题：{interview_requirement}
-
-采访内容：
-{"".join(interview_texts)}
-
-请生成采访摘要。"""
-
-        try:
-            summary = self.llm.chat(
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                temperature=0.3,
-                max_tokens=800
+            interview = AgentInterview(
+                agent_name=node.name,
+                agent_role=entity_type,
+                agent_bio=node.summary or "",
+                question=query or f"关于{node.name}的完整信息",
+                response=response_text,
+                key_quotes=facts[:3]
             )
-            return summary
-            
+            result.interviews.append(interview)
+
+        result.interviewed_count = len(result.interviews)
+
+        # Step 4: 生成整合摘要
+        try:
+            all_facts = []
+            for iv in result.interviews:
+                all_facts.extend(iv.key_quotes)
+            summary_lines = [f"共检索到 {result.total_agents} 个 {entity_type} 类型实体，展开分析 {result.interviewed_count} 个。"]
+            if all_facts:
+                summary_lines.append("\n**核心事实摘要:**")
+                summary_lines.extend([f"- {f}" for f in all_facts[:10]])
+            result.summary = "\n".join(summary_lines)
         except Exception as e:
-            logger.warning(f"生成采访摘要失败: {e}")
-            # 降级：简单拼接
-            return f"共采访了{len(interviews)}位受访者，包括：" + "、".join([i.agent_name for i in interviews])
+            logger.warning(f"生成摘要失败: {e}")
+            result.summary = f"已分析 {result.interviewed_count} 个 {entity_type} 实体"
+
+        logger.info(f"DeepEntityQuery完成: {result.interviewed_count} 个实体")
+        return result
+
