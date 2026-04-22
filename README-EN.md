@@ -275,7 +275,6 @@ python backend/scripts/token_usage.py /path/to/graphrag_data/weaveragent_xxxxx
 
 **Standing on the shoulders of giants**:
 - [Microsoft GraphRAG](https://github.com/microsoft/graphrag) — graph construction & retrieval core
-- [Graphiti](https://github.com/getzep/graphiti) — early ontology-design inspiration
 - [MiroFish](https://github.com/mirofish) — frontend interaction reference
 
 ## 📄 License

@@ -271,7 +271,6 @@ python backend/scripts/token_usage.py /path/to/graphrag_data/weaveragent_xxxxx
 
 **WeaverAgent 站在巨人的肩膀上**：
 - [Microsoft GraphRAG](https://github.com/microsoft/graphrag) —— 图谱构建与检索核心
-- [Graphiti](https://github.com/getzep/graphiti) —— 早期本体设计灵感
 - [MiroFish](https://github.com/mirofish) —— 前端交互设计参考
 
 ## 📄 许可证
