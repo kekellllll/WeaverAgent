@@ -103,7 +103,7 @@ REPORT_AGENT_TEMPERATURE=0.5
 | 国产合规 | `glm-5-turbo` / `qwen-plus` | 数据留在国内 |
 | 长文档 | `kimi-k2-turbo-preview` | 128K 上下文 |
 
-完整成本对比见 [`reports/work.md §5`](./reports/work.md#5-graphrag-多模型构建成本对比)。
+完整成本对比（含 **2026-04-22 百篇**基准库 token / 费用 / 墙钟）见 [`reports/work.md §5`](./reports/work.md#5-graphrag-多模型构建成本对比)。
 
 ### 2. 安装依赖
 
@@ -262,7 +262,7 @@ python backend/scripts/token_usage.py /path/to/graphrag_data/weaveragent_xxxxx
 
 | 文档 | 内容 |
 |---|---|
-| [reports/work.md](./reports/work.md) | 完整工作日志、架构、成本报告、路线图 |
+| [reports/work.md](./reports/work.md) | 完整工作日志、架构、成本报告（含百篇基准）、路线图 |
 | [reports/graphrag_cost_report.pdf](./reports/graphrag_cost_report.pdf) | 多模型构建成本对比（PDF） |
 | [.env.example](./.env.example) | 环境变量模板 |
 | [start.sh](./start.sh) / [stop.sh](./stop.sh) | 一键启动/停止脚本 |

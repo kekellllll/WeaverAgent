@@ -102,7 +102,7 @@ REPORT_AGENT_TEMPERATURE=0.5
 | Very long documents | `kimi-k2-turbo-preview` | 128K context |
 | **Avoid** for bulk indexing | `gpt-4o` | 16.7× the price of mini, no proportional gain |
 
-Full cost comparison (11 real builds) in [`reports/work.md §5`](./reports/work.md#5-graphrag-多模型构建成本对比).
+Full cost comparison (LaTeX-scanned builds + GPT-5 **10-paper** and **100-paper** case studies) in [`reports/work.md §5`](./reports/work.md#5-graphrag-多模型构建成本对比).
 
 ### 2. Install dependencies
 
@@ -266,7 +266,7 @@ python backend/scripts/token_usage.py /path/to/graphrag_data/weaveragent_xxxxx
 
 | Doc | Content |
 |---|---|
-| [reports/work.md](./reports/work.md) | Full worklog: architecture, cost report (11 builds), roadmap |
+| [reports/work.md](./reports/work.md) | Full worklog: architecture, cost report (incl. 100-paper benchmark), roadmap |
 | [reports/graphrag_cost_report.pdf](./reports/graphrag_cost_report.pdf) | Authoritative cost comparison across 7 LLMs (PDF) |
 | [.env.example](./.env.example) | Environment variable template |
 | [start.sh](./start.sh) / [stop.sh](./stop.sh) | One-click start / stop scripts |
