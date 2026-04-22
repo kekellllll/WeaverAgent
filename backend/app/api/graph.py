@@ -11,7 +11,7 @@ from flask import request, jsonify
 from . import graph_bp
 from ..config import Config
 from ..services.ontology_generator import OntologyGenerator
-from ..services.graph_builder import GraphBuilderService
+from ..services.graphrag_builder import GraphBuilderService  # ← GraphRAG 版本
 from ..services.text_processor import TextProcessor
 from ..utils.file_parser import FileParser
 from ..utils.logger import get_logger
@@ -282,10 +282,10 @@ def build_graph():
     try:
         logger.info("=== 开始构建图谱 ===")
         
-        # 检查配置
+        # 检查配置（GraphRAG 不需要 ZEP_API_KEY，只需要 LLM_API_KEY）
         errors = []
-        if not Config.ZEP_API_KEY:
-            errors.append("ZEP_API_KEY未配置")
+        if not Config.LLM_API_KEY:
+            errors.append("LLM_API_KEY未配置")
         if errors:
             logger.error(f"配置错误: {errors}")
             return jsonify({
@@ -382,33 +382,34 @@ def build_graph():
                 )
                 
                 # 创建图谱构建服务
-                builder = GraphBuilderService(api_key=Config.ZEP_API_KEY)
+                builder = GraphBuilderService()  # GraphRAG 无需 api_key
                 
-                # 分块
+                # 解析为完整文档（不预切碎，让 GraphRAG 按 token 切块）
+                from ..services.graphrag_builder import _split_text_by_doc_markers
                 task_manager.update_task(
                     task_id,
-                    message="文本分块中...",
+                    message="解析文档结构...",
                     progress=5
                 )
-                chunks = TextProcessor.split_text(
-                    text, 
-                    chunk_size=chunk_size, 
-                    overlap=chunk_overlap
+                documents = _split_text_by_doc_markers(text)
+                total_chunks = len(documents)
+                build_logger.info(
+                    f"[{task_id}] 准备写入 {total_chunks} 篇文档（共 {len(text):,} 字符），"
+                    f"GraphRAG 将按 1200 token / chunk 自动切块"
                 )
-                total_chunks = len(chunks)
-                
+
                 # 创建图谱
                 task_manager.update_task(
                     task_id,
-                    message="创建Zep图谱...",
+                    message="创建GraphRAG图谱...",
                     progress=10
                 )
                 graph_id = builder.create_graph(name=graph_name)
-                
+
                 # 更新项目的graph_id
                 project.graph_id = graph_id
                 ProjectManager.save_project(project)
-                
+
                 # 设置本体
                 task_manager.update_task(
                     task_id,
@@ -416,8 +417,8 @@ def build_graph():
                     progress=15
                 )
                 builder.set_ontology(graph_id, ontology)
-                
-                # 添加文本（progress_callback 签名是 (msg, progress_ratio)）
+
+                # 写入完整文档（progress_callback 签名是 (msg, progress_ratio)）
                 def add_progress_callback(msg, progress_ratio):
                     progress = 15 + int(progress_ratio * 40)  # 15% - 55%
                     task_manager.update_task(
@@ -425,28 +426,27 @@ def build_graph():
                         message=msg,
                         progress=progress
                     )
-                
+
                 task_manager.update_task(
                     task_id,
-                    message=f"开始添加 {total_chunks} 个文本块...",
+                    message=f"开始写入 {total_chunks} 篇完整文档...",
                     progress=15
                 )
-                
-                episode_uuids = builder.add_text_batches(
-                    graph_id, 
-                    chunks,
-                    batch_size=3,
+
+                episode_uuids = builder.add_documents(
+                    graph_id,
+                    documents,
                     progress_callback=add_progress_callback
                 )
                 
-                # 等待Zep处理完成（查询每个episode的processed状态）
+                # 运行 GraphRAG 索引管道（实体/关系提取 + 社区检测 + 向量索引）
                 task_manager.update_task(
                     task_id,
-                    message="等待Zep处理数据...",
+                    message="运行 GraphRAG 索引管道（LLM 推断中，可能需要几分钟）...",
                     progress=55
                 )
                 
-                def wait_progress_callback(msg, progress_ratio):
+                def indexing_progress_callback(msg, progress_ratio):
                     progress = 55 + int(progress_ratio * 35)  # 55% - 90%
                     task_manager.update_task(
                         task_id,
@@ -454,7 +454,7 @@ def build_graph():
                         progress=progress
                     )
                 
-                builder._wait_for_episodes(episode_uuids, wait_progress_callback)
+                builder._run_indexing_pipeline(graph_id, indexing_progress_callback)
                 
                 # 获取图谱数据
                 task_manager.update_task(
@@ -567,13 +567,7 @@ def get_graph_data(graph_id: str):
     获取图谱数据（节点和边）
     """
     try:
-        if not Config.ZEP_API_KEY:
-            return jsonify({
-                "success": False,
-                "error": "ZEP_API_KEY未配置"
-            }), 500
-        
-        builder = GraphBuilderService(api_key=Config.ZEP_API_KEY)
+        builder = GraphBuilderService()
         graph_data = builder.get_graph_data(graph_id)
         
         return jsonify({
@@ -592,16 +586,10 @@ def get_graph_data(graph_id: str):
 @graph_bp.route('/delete/<graph_id>', methods=['DELETE'])
 def delete_graph(graph_id: str):
     """
-    删除Zep图谱
+    删除图谱（GraphRAG 本地目录）
     """
     try:
-        if not Config.ZEP_API_KEY:
-            return jsonify({
-                "success": False,
-                "error": "ZEP_API_KEY未配置"
-            }), 500
-
-        builder = GraphBuilderService(api_key=Config.ZEP_API_KEY)
+        builder = GraphBuilderService()
         builder.delete_graph(graph_id)
 
         return jsonify({
@@ -643,10 +631,6 @@ def append_documents(project_id: str):
     """
     try:
         logger.info(f"=== 开始追加文献: project_id={project_id} ===")
-
-        # 检查配置
-        if not Config.ZEP_API_KEY:
-            return jsonify({"success": False, "error": "ZEP_API_KEY未配置"}), 500
 
         # 获取项目
         project = ProjectManager.get_project(project_id)
@@ -701,7 +685,6 @@ def append_documents(project_id: str):
                 "error": "没有成功处理任何新文献，请检查文件格式"
             }), 400
 
-        combined_new_text = "\n\n".join(new_texts)
         graph_id = project.graph_id
 
         # 创建追加任务
@@ -725,16 +708,28 @@ def append_documents(project_id: str):
                     message="初始化追加服务..."
                 )
 
-                builder = GraphBuilderService(api_key=Config.ZEP_API_KEY)
+                builder = GraphBuilderService()  # GraphRAG 无需 api_key
 
-                task_manager.update_task(task_id, message="文本分块中...", progress=5)
-                chunks = TextProcessor.split_text(
-                    combined_new_text,
-                    chunk_size=chunk_size,
-                    overlap=chunk_overlap
+                prev_data = builder.get_graph_data(graph_id)
+                prev_nodes = prev_data.get("node_count", 0)
+                prev_edges = prev_data.get("edge_count", 0)
+
+                task_manager.update_task(
+                    task_id, message="准备追加完整文档...", progress=5
                 )
-                total_chunks = len(chunks)
-                append_logger.info(f"[{task_id}] 新文本分为 {total_chunks} 块")
+                # 整篇追加：每篇新文献作为一个完整文档写入（不预切碎）
+                # 由 GraphRAG 按 token 自动切块（1200/chunk），避免句子被腰斩
+                documents = [
+                    {"name": info["filename"], "text": txt}
+                    for info, txt in zip(new_file_infos, new_texts)
+                    if txt.strip()
+                ]
+                total_chunks = len(documents)
+                total_chars = sum(len(d["text"]) for d in documents)
+                append_logger.info(
+                    f"[{task_id}] 追加 {total_chunks} 篇文档（共 {total_chars:,} 字符），"
+                    f"GraphRAG 将按 1200 token / chunk 自动切块"
+                )
 
                 def add_progress_callback(msg, progress_ratio):
                     progress = 10 + int(progress_ratio * 50)
@@ -742,24 +737,27 @@ def append_documents(project_id: str):
 
                 task_manager.update_task(
                     task_id,
-                    message=f"开始追加 {total_chunks} 个文本块...",
+                    message=f"开始追加 {total_chunks} 篇文档...",
                     progress=10
                 )
 
-                episode_uuids = builder.add_text_batches(
+                episode_uuids = builder.add_documents(
                     graph_id,
-                    chunks,
-                    batch_size=3,
+                    documents,
                     progress_callback=add_progress_callback
                 )
 
-                task_manager.update_task(task_id, message="等待Zep处理新数据...", progress=60)
+                task_manager.update_task(
+                    task_id,
+                    message="运行 GraphRAG 增量索引（LLM 推断中）...",
+                    progress=60
+                )
 
-                def wait_progress_callback(msg, progress_ratio):
+                def indexing_progress_callback(msg, progress_ratio):
                     progress = 60 + int(progress_ratio * 30)
                     task_manager.update_task(task_id, message=msg, progress=progress)
 
-                builder._wait_for_episodes(episode_uuids, wait_progress_callback)
+                builder._run_indexing_pipeline(graph_id, indexing_progress_callback, is_update_run=True)
 
                 task_manager.update_task(task_id, message="获取图谱数据...", progress=95)
                 graph_data = builder.get_graph_data(graph_id)
@@ -770,8 +768,11 @@ def append_documents(project_id: str):
 
                 node_count = graph_data.get("node_count", 0)
                 edge_count = graph_data.get("edge_count", 0)
+                new_nodes = node_count - prev_nodes
+                new_edges = edge_count - prev_edges
                 append_logger.info(
-                    f"[{task_id}] 文献追加完成: 节点={node_count}, 边={edge_count}"
+                    f"[{task_id}] 文献追加完成: 新增节点={new_nodes}, 新增边={new_edges}, "
+                    f"总节点={node_count}, 总边={edge_count}"
                 )
 
                 task_manager.update_task(
@@ -783,8 +784,10 @@ def append_documents(project_id: str):
                         "project_id": project_id,
                         "graph_id": graph_id,
                         "new_chunks": total_chunks,
+                        "new_nodes": new_nodes,
+                        "new_edges": new_edges,
                         "node_count": node_count,
-                        "edge_count": edge_count
+                        "edge_count": edge_count,
                     }
                 )
 
@@ -812,7 +815,7 @@ def append_documents(project_id: str):
             "data": {
                 "project_id": project_id,
                 "task_id": task_id,
-                "new_files": len(new_file_infos),
+                "new_files": [f["filename"] for f in new_file_infos],
                 "message": "文献追加任务已启动，请通过 /api/graph/task/{task_id} 查询进度"
             }
         })

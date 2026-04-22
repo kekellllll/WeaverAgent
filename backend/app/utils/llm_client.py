@@ -5,8 +5,12 @@ LLM客户端封装
 
 import json
 import re
+import time
+import logging
 from typing import Optional, Dict, Any, List
 from openai import OpenAI
+
+logger = logging.getLogger('weaveragent.llm_client')
 
 from ..config import Config
 
@@ -51,26 +55,94 @@ class LLMClient:
         Returns:
             模型响应文本
         """
-        kwargs = {
+        is_gpt5 = bool(re.match(r'gpt-5', self.model, re.IGNORECASE))
+
+        kwargs: Dict[str, Any] = {
             "model": self.model,
             "messages": messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
         }
-        
+
+        if is_gpt5:
+            # GPT-5 系列是 reasoning 模型，API 限制：
+            #   1. 不接受自定义 temperature（只能用默认 1）
+            #   2. 用 max_completion_tokens 而不是 max_tokens
+            #   3. reasoning_effort 控制思考量：minimal/low/medium(默认)/high
+            #      - minimal: 几乎不思考，速度/单价接近 gpt-4o-mini，但 ReACT 工具选择会失败
+            #      - low: 仅做必要决策，比默认快 3-5 倍，仍能正确触发工具调用
+            kwargs["max_completion_tokens"] = max_tokens
+            kwargs["reasoning_effort"] = kwargs.pop("reasoning_effort", "low")
+        else:
+            kwargs["temperature"] = temperature
+            kwargs["max_tokens"] = max_tokens
+
         if response_format:
             kwargs["response_format"] = response_format
 
-        # qwen3 系列（含 qwen3.x）默认开启思考模式，与 response_format 不兼容
-        # 通过 extra_body 传入 enable_thinking=False 强制关闭
+        # 各家思考型模型默认开启 reasoning，与 response_format=json 不兼容且浪费大量 tokens
+        # 通过 extra_body 关闭：
+        #   - Qwen3:  enable_thinking=False
+        #   - GLM-5+: thinking.type=disabled
         if re.match(r'qwen3', self.model, re.IGNORECASE):
             kwargs["extra_body"] = {"enable_thinking": False}
+        elif re.match(r'glm', self.model, re.IGNORECASE):
+            kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
 
-        response = self.client.chat.completions.create(**kwargs)
-        content = response.choices[0].message.content
-        # 兜底：移除 <think>...</think> 思考内容（防止部分模型忽略 enable_thinking）
-        content = re.sub(r'<think>[\s\S]*?</think>', '', content).strip()
-        return content
+        max_retries = 5
+        for attempt in range(max_retries):
+            try:
+                response = self.client.chat.completions.create(**kwargs)
+                content = response.choices[0].message.content or ""
+                content = re.sub(r'<think>[\s\S]*?</think>', '', content).strip()
+
+                usage = getattr(response, "usage", None)
+                if usage is not None:
+                    pt = getattr(usage, "prompt_tokens", 0) or 0
+                    ct = getattr(usage, "completion_tokens", 0) or 0
+                    rt = 0
+                    details = getattr(usage, "completion_tokens_details", None)
+                    if details is not None:
+                        rt = getattr(details, "reasoning_tokens", 0) or 0
+                    logger.info(
+                        f"[usage] model={self.model} prompt={pt} completion={ct} "
+                        f"reasoning={rt} total={pt+ct}"
+                    )
+
+                # GPT-5 reasoning 模型可能把所有 token 都用在思考上、content 为空
+                # 自动加大 max_completion_tokens 重试一次
+                if not content and is_gpt5 and attempt < 2:
+                    finish = response.choices[0].finish_reason
+                    usage = getattr(response, "usage", None)
+                    reasoning = getattr(getattr(usage, "completion_tokens_details", None), "reasoning_tokens", 0) if usage else 0
+                    new_budget = max(int(kwargs["max_completion_tokens"] * 2), reasoning * 4 + 1024)
+                    logger.warning(
+                        f"GPT-5 空响应 (finish={finish}, reasoning_tokens={reasoning}), "
+                        f"max_completion_tokens {kwargs['max_completion_tokens']} → {new_budget} 重试"
+                    )
+                    kwargs["max_completion_tokens"] = new_budget
+                    continue
+
+                return content
+            except Exception as e:
+                err_str = str(e)
+                err_lower = err_str.lower()
+                is_rate_limit = (
+                    "429" in err_str
+                    or "rate_limit" in err_lower
+                    or "rate limit" in err_lower
+                    or "too many requests" in err_lower
+                )
+                if is_rate_limit and attempt < max_retries - 1:
+                    delay = 2.0 * (2 ** attempt)
+                    logger.warning(
+                        f"Rate limit hit ({type(e).__name__}: {err_str[:200]}), "
+                        f"retry {attempt+1}/{max_retries} after {delay:.0f}s"
+                    )
+                    time.sleep(delay)
+                else:
+                    logger.error(
+                        f"LLM 调用失败 ({type(e).__name__}): {err_str[:500]}"
+                    )
+                    raise
     
     def chat_json(
         self,

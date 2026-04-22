@@ -21,12 +21,12 @@ from enum import Enum
 from ..config import Config
 from ..utils.llm_client import LLMClient
 from ..utils.logger import get_logger
-from .zep_tools import (
-    ZepToolsService, 
-    SearchResult, 
-    InsightForgeResult, 
+from .graphrag_tools import (          # ← 使用 GraphRAG 版本（接口完全兼容）
+    ZepToolsService,                   # graphrag_tools.py 中已设置为 GraphRAGToolsService 别名
+    SearchResult,
+    InsightForgeResult,
     PanoramaResult,
-    InterviewResult
+    InterviewResult,
 )
 
 logger = get_logger('weaveragent.report_agent')
@@ -836,26 +836,87 @@ CHAT_SYSTEM_PROMPT_TEMPLATE = """\
 【已生成的知识图谱分析报告】
 {report_content}
 
-【规则】
-1. 优先基于上述报告内容回答问题
-2. 直接回答问题，避免冗长的思考论述
-3. 仅在报告内容不足以回答时，才调用工具检索图谱中更多文献数据
-4. 回答要简洁、清晰、有条理
+【回答规则】
+1. **先看报告**：若上面的报告已经能回答问题，直接基于报告作答，不要调用工具。
+2. **报告不足时必须调用工具**：当用户问的概念/术语在报告里没有，或需要更多文献支撑时，**必须**先调用工具检索，**严禁**未调用工具就直接说"未检索到/暂无数据"。
+3. 回答要简洁、有条理，用 > 格式引用关键文献。
 
-【可用工具】（仅在需要时使用，最多调用1-2次）
+【工具选择策略】（按优先级）
+- **首选 `quick_search`**：用户问"X是什么/描述一下X/介绍X"这类开放问题时使用，传 `query` 即可，不需要指定实体类型。
+  - query **不要**塞进论文全标题或一串无关关键词，会稀释打分。用 2-5 个核心关键词最好。
+- **`panorama_search`**：需要全景了解一个领域/主题的多面信息时用。
+- **`deep_entity_query`**：仅当你**非常确信**某个名词属于哪个实体类型（Paper/Method/Dataset/Author/Metric/Task/Innovation/Baseline）时才用。例如 ImageNet→Dataset、ResNet→Method。**不要默认用 entity_type=Method**。
+- **`insight_forge`**：需要对一个复杂问题做多角度深度分析时用。
+
+【对比/比较问题的专用策略】（"compare A vs B / A 和 B 的区别 / A 相比 B"）
+当用户要求对比 A 和 B 两个概念/方法时，**必须至少做 3 次工具调用**：
+  1. `quick_search("A")` —— 只搜 A 的名字（最多加 1 个核心词）
+  2. `quick_search("B")` —— 只搜 B 的名字
+  3. `quick_search("A B outperforms baseline comparison")` 或类似对比关键词 —— 找直接对比边
+  （可选 4: `deep_entity_query(entity_type="Method", query="A")` 捞完整实体邻居）
+- **只调 2 次就收工等于失职**。图谱里常有 "A → B: outperforms/beats/compares_with" 这类直接对比边，要主动去找。
+
+【关键 Fallback 规则】
+- 如果一个工具返回 "未找到/无数据/空结果"，**必须立刻换另一个更宽松的工具再试一次**（通常切到 `quick_search` 或 `panorama_search`，并把 query 简化为更通用的关键词）。
+- 只有连续 2 次工具都没结果，才能回复"图谱中暂无相关数据"。
+
+【严禁打白条（最重要）】
+- **绝对禁止**在回复中写"请稍等 / 我将检索 / 我接下来会查 / 稍后给出 / 让我先搜一下"这类空承诺，然后就停下来。
+- 每一轮回复**只能是以下两种之一**：
+  (A) 以 `<tool_call>` 块开头，实际发起一次工具调用；或
+  (B) 直接给出完整的最终答案（含 `>` 引用和具体条目）。
+- 如果你还想继续检索，**必须立刻在同一条回复里发出下一个 `<tool_call>`**，而不是用自然语言说"我要去查"。
+
+【可用工具】
 {tools_description}
 
-【工具调用格式】
+【工具调用格式】（严格 JSON，name 和 parameters 两个字段）
 <tool_call>
-{{"name": "工具名称", "parameters": {{"参数名": "参数值"}}}}
+{{"name": "quick_search", "parameters": {{"query": "your query"}}}}
 </tool_call>
 
-【回答风格】
-- 简洁直接，不要长篇大论
-- 使用 > 格式引用关键文献内容
-- 优先给出结论，再解释原因"""
+【最终答复格式（必须严格遵守）】
+当你给出最终答案时（不再调用工具时），必须按以下两段结构输出：
 
-CHAT_OBSERVATION_SUFFIX = "\n\n请简洁回答问题。"
+## 📚 Top-5 参考条目
+1. **[实体名]** — 一句话说明为什么相关  *（来源：论文标题）*
+   > 原文片段（直接引用图谱中的 description / fact）
+2. **[...]** — ...  *（来源：...）*
+   > ...
+3. **[...]** — ...  *（来源：...）*
+   > ...
+4. **[...]** — ...  *（来源：...）*
+   > ...
+5. **[...]** — ...  *（来源：...）*
+   > ...
+（若可用证据不足 5 条，如实标注"暂只检索到 N 条"，不要编造。）
+
+## 💡 回答
+基于上面参考条目的综合分析。简洁、有条理；关键判断后用 `[#1]`、`[#3]` 这样的方式反向引用上面的编号。
+
+【来源论文的获取方式（重要）】
+工具返回的每条事实/实体后面会附带 `【来源: XXX】` 标签，例如：
+> "TURBOQUANT → RABITQ: Consistently outperforms RabitQ in recall ratio 【来源: TurboQuant: Online Vector Quantization...】"
+
+你**必须**把这个来源信息完整搬到最终答复的 *（来源：...）* 里。
+- 如果一条引用**没有**对应的 `【来源: XXX】` 标签，写 *（来源：图谱社区摘要 / 未标注）*
+- 不要自己编造论文标题 —— 只用工具真实返回的来源
+
+【回答风格】
+- 参考条目要具体到**实体名**，不要泛泛写"相关文献"
+- 原文片段尽量用图谱里的真实描述，避免编造
+- 来源论文一定要写全标题（不要只写"TurboQuant 论文"这种省略写法）
+- 先列参考、再给结论"""
+
+CHAT_OBSERVATION_SUFFIX = (
+    "\n\n请基于以上工具结果回答问题。"
+    "现在你**只能**做以下之一："
+    "(A) 如果信息够，按【最终答复格式】给出答案："
+    "    先写 `## 📚 Top-5 参考条目`（每条：论文/实体名 + 一句相关性说明 + `>` 引用原文），"
+    "    再写 `## 💡 回答`（正文 + `[#N]` 反向引用）；"
+    "(B) 如果信息不够，立刻再发一个 <tool_call>...</tool_call>，换更宽松的工具或关键词。"
+    "**严禁**输出'请稍等/我将检索/稍后给出'等空承诺——这些会被系统判为无效回复。"
+)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -879,8 +940,8 @@ class ReportAgent:
     # 最大反思轮数
     MAX_REFLECTION_ROUNDS = 3
     
-    # 对话中的最大工具调用次数
-    MAX_TOOL_CALLS_PER_CHAT = 2
+    # 对话中的最大工具调用次数（允许 fallback 重试 + 对比问题多角度检索）
+    MAX_TOOL_CALLS_PER_CHAT = 4
     
     def __init__(
         self, 
@@ -932,8 +993,7 @@ class ReportAgent:
                 "name": "panorama_search",
                 "description": TOOL_DESC_PANORAMA_SEARCH,
                 "parameters": {
-                    "query": "搜索查询，用于相关性排序",
-                    "include_expired": "是否包含过期/历史内容（默认True）"
+                    "query": "搜索查询，用于相关性排序"
                 }
             },
             "quick_search": {
@@ -976,7 +1036,7 @@ class ReportAgent:
                 result = self.zep_tools.insight_forge(
                     graph_id=self.graph_id,
                     query=query,
-                    simulation_requirement=self.simulation_requirement,
+                    analysis_requirement=self.simulation_requirement,
                     report_context=ctx
                 )
                 return result.to_text()
@@ -984,13 +1044,9 @@ class ReportAgent:
             elif tool_name == "panorama_search":
                 # 广度搜索 - 获取全貌
                 query = parameters.get("query", "")
-                include_expired = parameters.get("include_expired", True)
-                if isinstance(include_expired, str):
-                    include_expired = include_expired.lower() in ['true', '1', 'yes']
                 result = self.zep_tools.panorama_search(
                     graph_id=self.graph_id,
-                    query=query,
-                    include_expired=include_expired
+                    query=query
                 )
                 return result.to_text()
             
@@ -1017,13 +1073,14 @@ class ReportAgent:
                 if isinstance(max_entities, str):
                     max_entities = int(max_entities)
                 max_entities = min(max_entities, 10)
-                result = self.zep_tools.deep_entity_query(
+                nodes = self.zep_tools.deep_entity_query(
                     graph_id=self.graph_id,
                     entity_type=entity_type,
                     query=str(query),
                     max_entities=max_entities
                 )
-                return result.to_text()
+                result = [n.to_dict() for n in nodes]
+                return json.dumps(result, ensure_ascii=False, indent=2)
             
             # ========== 向后兼容的旧工具（内部重定向到新工具） ==========
             
@@ -1063,8 +1120,18 @@ class ReportAgent:
                 return f"未知工具: {tool_name}。请使用以下工具之一: insight_forge, panorama_search, quick_search, deep_entity_query"
                 
         except Exception as e:
-            logger.error(f"工具执行失败: {tool_name}, 错误: {str(e)}")
-            return f"工具执行失败: {str(e)}"
+            err_str = str(e)
+            if "429" in err_str or "rate_limit" in err_str.lower() or "Rate limit" in err_str:
+                import time as _time
+                logger.warning(f"工具 {tool_name} 遇到速率限制，等待 5 秒后重试...")
+                _time.sleep(5)
+                try:
+                    return self._execute_tool(tool_name, parameters, report_context)
+                except Exception as retry_err:
+                    logger.error(f"重试仍失败: {tool_name}, 错误: {str(retry_err)}")
+                    return f"工具执行失败（重试后）: {str(retry_err)}"
+            logger.error(f"工具执行失败: {tool_name}, 错误: {err_str}")
+            return f"工具执行失败: {err_str}"
     
     # 合法的工具名称集合，用于裸 JSON 兜底解析时校验
     VALID_TOOL_NAMES = {"insight_forge", "panorama_search", "quick_search", "deep_entity_query", "interview_agents"}
@@ -1079,14 +1146,55 @@ class ReportAgent:
         """
         tool_calls = []
 
-        # 格式1: XML风格（标准格式）
-        xml_pattern = r'<tool_call>\s*(\{.*?\})\s*</tool_call>'
-        for match in re.finditer(xml_pattern, response, re.DOTALL):
-            try:
-                call_data = json.loads(match.group(1))
-                tool_calls.append(call_data)
-            except json.JSONDecodeError:
-                pass
+        # 格式1: <tool_call>...</tool_call> 块
+        # 部分模型（如 GLM-5）输出非常不规范，可能掺杂 <arg_value>/<arg_key>/yaml 等格式，
+        # 因此采用"宽容解析"：取块内任意白名单工具名 + 任意 JSON 对象组合
+        tool_blocks = re.findall(
+            r'<tool_call>(.*?)(?:</tool_call>|<tool_call>|$)',
+            response,
+            re.DOTALL,
+        )
+        for raw_block in tool_blocks:
+            block = raw_block.strip()
+            if not block:
+                continue
+
+            # 1a. 严格 JSON: {"name": ..., "parameters": {...}}
+            json_obj_match = re.search(r'\{[^{}]*"(?:name|tool)"\s*:.*?\}', block, re.DOTALL)
+            if json_obj_match:
+                try:
+                    call_data = json.loads(json_obj_match.group(0))
+                    if self._is_valid_tool_call(call_data):
+                        tool_calls.append(call_data)
+                        continue
+                except json.JSONDecodeError:
+                    pass
+
+            # 1b. 宽容模式：从块里找出 (工具名 + JSON 参数对象)
+            tool_name = None
+            for valid_name in self.VALID_TOOL_NAMES:
+                if re.search(rf'\b{re.escape(valid_name)}\b', block):
+                    tool_name = valid_name
+                    break
+            if tool_name:
+                # 找出最大 / 最后一个 JSON 对象作为参数
+                params: Dict[str, Any] = {}
+                for params_match in re.finditer(r'\{[^{}]*\}', block, re.DOTALL):
+                    candidate = params_match.group(0)
+                    try:
+                        parsed = json.loads(candidate)
+                        if isinstance(parsed, dict):
+                            params = parsed
+                    except json.JSONDecodeError:
+                        # 修补 GLM 偶尔丢失的开头 { (例如 'parameters": {...}')
+                        try:
+                            patched = re.sub(r'^\{?', '{', candidate)
+                            parsed = json.loads(patched)
+                            if isinstance(parsed, dict):
+                                params = parsed
+                        except json.JSONDecodeError:
+                            continue
+                tool_calls.append({"name": tool_name, "parameters": params})
 
         if tool_calls:
             return tool_calls
@@ -1827,24 +1935,66 @@ class ReportAgent:
         
         # ReACT循环（简化版）
         tool_calls_made = []
-        max_iterations = 2  # 减少迭代轮数
+        max_iterations = 5  # 对比问题要 3-4 次工具调用 + fallback/打白条重试
         
         for iteration in range(max_iterations):
             response = self.llm.chat(
                 messages=messages,
                 temperature=0.5
             )
-            
-            # 解析工具调用
+            logger.info(
+                f"[chat] iter={iteration} prompt_tokens≈{sum(len(m.get('content','')) for m in messages)} "
+                f"raw_len={len(response)} raw_head={response[:300]!r}"
+            )
+
             tool_calls = self._parse_tool_calls(response)
-            
+
             if not tool_calls:
-                # 没有工具调用，直接返回响应
                 clean_response = re.sub(r'<tool_call>.*?</tool_call>', '', response, flags=re.DOTALL)
                 clean_response = re.sub(r'\[TOOL_CALL\].*?\)', '', clean_response)
-                
+                final_text = clean_response.strip()
+
+                # ── 检测"打白条"：模型说要去查但没实际发工具调用 ──
+                # 典型话术：请稍等 / 我将检索 / 我接下来会 / 让我先搜 / 稍后给出
+                # 英文：let me search / I will search / please hold on
+                sandbag_patterns = [
+                    r'请稍等', r'稍等', r'稍后', r'我将', r'我会(?:先|继续|接下来)',
+                    r'我(?:接下来|现在|先)(?:去|用|要|来)?(?:检索|搜索|查)',
+                    r'让我(?:先|继续)?(?:搜|查|检索)',
+                    r'我(?:马上|立刻)(?:去|就)?(?:查|搜)',
+                    r'(?i)let me search', r'(?i)i(?:\'ll| will) (?:search|check|look)',
+                    r'(?i)please (?:hold on|wait)', r'(?i)one moment',
+                ]
+                is_sandbag = (
+                    iteration < max_iterations - 1
+                    and tool_calls_made  # 前面已经调过工具，说明对话还在进行中
+                    and len(final_text) < 400  # 真正的最终答案通常更长
+                    and any(re.search(p, final_text) for p in sandbag_patterns)
+                )
+                if is_sandbag:
+                    logger.warning(
+                        f"[chat] iter={iteration} 检测到打白条回复，强制再推一轮。"
+                        f"原文: {final_text[:200]!r}"
+                    )
+                    messages.append({"role": "assistant", "content": response})
+                    messages.append({
+                        "role": "user",
+                        "content": (
+                            "不要说'请稍等/我将检索'这类空话。"
+                            "如果你还要检索，**立刻**发出 <tool_call>...</tool_call>；"
+                            "如果你已经有足够信息，**立刻**直接给出最终答案（包含具体论文条目和 > 引用）。"
+                            "不要再拖延。"
+                        )
+                    })
+                    continue  # 重新进入下一轮
+
+                if not final_text:
+                    logger.warning(
+                        f"[chat] empty response after cleanup. raw={response!r}"
+                    )
+                    final_text = "(模型未返回有效内容，请重试或换个问法)"
                 return {
-                    "response": clean_response.strip(),
+                    "response": final_text,
                     "tool_calls": tool_calls_made,
                     "sources": [tc.get("parameters", {}).get("query", "") for tc in tool_calls_made]
                 }
@@ -1869,18 +2019,22 @@ class ReportAgent:
                 "content": observation + CHAT_OBSERVATION_SUFFIX
             })
         
-        # 达到最大迭代，获取最终响应
         final_response = self.llm.chat(
             messages=messages,
             temperature=0.5
         )
-        
-        # 清理响应
+        logger.info(
+            f"[chat] final raw_len={len(final_response)} raw_head={final_response[:300]!r}"
+        )
+
         clean_response = re.sub(r'<tool_call>.*?</tool_call>', '', final_response, flags=re.DOTALL)
         clean_response = re.sub(r'\[TOOL_CALL\].*?\)', '', clean_response)
-        
+        final_text = clean_response.strip()
+        if not final_text:
+            logger.warning(f"[chat] final empty after cleanup. raw={final_response!r}")
+            final_text = "(模型未返回有效内容，请重试或换个问法)"
         return {
-            "response": clean_response.strip(),
+            "response": final_text,
             "tool_calls": tool_calls_made,
             "sources": [tc.get("parameters", {}).get("query", "") for tc in tool_calls_made]
         }

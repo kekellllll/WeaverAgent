@@ -392,13 +392,15 @@ const startPollingTask = (taskId) => {
   pollTimer = setInterval(() => pollTaskStatus(taskId), 2000)
 }
 
+let taskNotFoundCount = 0
+
 const pollTaskStatus = async (taskId) => {
   try {
     const res = await getTaskStatus(taskId)
     if (res.success) {
+      taskNotFoundCount = 0
       const task = res.data
       
-      // Log progress message if it changed
       if (task.message && task.message !== buildProgress.value?.message) {
         addLog(task.message)
       }
@@ -408,10 +410,9 @@ const pollTaskStatus = async (taskId) => {
       if (task.status === 'completed') {
         addLog('Graph build task completed.')
         stopPolling()
-        stopGraphPolling() // Stop polling, do final load
+        stopGraphPolling()
         currentPhase.value = 2
         
-        // Final load
         const projRes = await getProject(currentProjectId.value)
         if (projRes.success && projRes.data.graph_id) {
             projectData.value = projRes.data
@@ -421,6 +422,28 @@ const pollTaskStatus = async (taskId) => {
         stopPolling()
         error.value = task.error
         addLog(`Graph build task failed: ${task.error}`)
+      }
+    } else {
+      taskNotFoundCount++
+      if (taskNotFoundCount >= 5) {
+        // Task lost (server restarted). Check project status directly.
+        const projRes = await getProject(currentProjectId.value)
+        if (projRes.success) {
+          const st = projRes.data.status
+          if (st === 'graph_completed') {
+            addLog('后端重启，任务状态丢失，但图谱已构建完成。')
+            stopPolling()
+            stopGraphPolling()
+            currentPhase.value = 2
+            projectData.value = projRes.data
+            if (projRes.data.graph_id) await loadGraph(projRes.data.graph_id)
+          } else if (st === 'failed') {
+            addLog('构建失败: ' + (projRes.data.error || '未知错误'))
+            stopPolling()
+            error.value = projRes.data.error
+          }
+          // if still graph_building, keep polling — indexing may still be running
+        }
       }
     }
   } catch (e) {

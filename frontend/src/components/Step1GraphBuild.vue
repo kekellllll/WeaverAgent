@@ -110,11 +110,11 @@
         <div class="card-header">
           <div class="step-info">
             <span class="step-num">02</span>
-            <span class="step-title">GraphRAG构建</span>
+            <span class="step-title">GraphRAG 构建</span>
           </div>
           <div class="step-status">
             <span v-if="currentPhase > 1" class="badge success">已完成</span>
-            <span v-else-if="currentPhase === 1" class="badge processing">{{ buildProgress?.progress || 0 }}%</span>
+            <span v-else-if="currentPhase === 1" class="badge processing">构建中</span>
             <span v-else class="badge pending">等待</span>
           </div>
         </div>
@@ -122,9 +122,23 @@
         <div class="card-content">
           <p class="api-note">POST /api/graph/build</p>
           <p class="description">
-            基于生成的学术本体，将论文内容自动分块后调用 Zep 构建知识图谱，提取论文、方法、数据集等实体及其引用/演进关系，形成可查询的 GraphRAG 索引
+            基于生成的学术本体，将论文内容自动分块后调用 LLM 构建知识图谱，提取论文、方法、数据集等实体及其引用/演进关系，形成可查询的 GraphRAG 索引
           </p>
-          
+
+          <!-- 构建进度条（仅构建阶段可见） -->
+          <div v-if="currentPhase === 1 && buildProgress" class="build-progress-section">
+            <div class="build-progress-header">
+              <span class="build-progress-msg">{{ buildProgress.message || '准备中...' }}</span>
+              <span class="build-progress-pct">{{ buildProgress.progress || 0 }}%</span>
+            </div>
+            <div class="build-progress-track">
+              <div
+                class="build-progress-fill"
+                :style="{ width: (buildProgress.progress || 0) + '%' }"
+              ></div>
+            </div>
+          </div>
+
           <!-- Stats Cards -->
           <div class="stats-grid">
             <div class="stat-card">
@@ -661,5 +675,44 @@ watch(() => props.systemLogs.length, () => {
 .log-msg {
   color: #CCC;
   word-break: break-all;
+}
+
+/* ── Build Progress ── */
+.build-progress-section {
+  margin: 16px 0 12px;
+  padding: 14px 16px;
+  background: #0D1117;
+  border: 1px solid #1E293B;
+  border-radius: 10px;
+}
+.build-progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.build-progress-msg {
+  font-size: 13px;
+  color: #94A3B8;
+  font-weight: 500;
+}
+.build-progress-pct {
+  font-size: 13px;
+  font-weight: 700;
+  color: #60A5FA;
+  font-family: 'JetBrains Mono', 'SF Mono', monospace;
+}
+.build-progress-track {
+  height: 8px;
+  background: #1E293B;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.build-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3B82F6, #60A5FA);
+  border-radius: 4px;
+  transition: width 0.6s ease;
+  min-width: 2px;
 }
 </style>

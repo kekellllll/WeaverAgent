@@ -61,3 +61,22 @@ backend/rag_index/
 
 # Docker 数据
 data/graphiti/
+
+# === 开源仓库排除项（2026-04 新增）=========================
+# 研究/基准数据（非引擎代码）
+/data/
+/rag_benchmark_100/
+/rag_benchmark_100_md/
+
+# 已被 graphrag_builder.py 取代的遗留实现
+/graphiti/
+
+# 嵌入式 vendored 依赖的子 .git（确保 graphrag/ 作为普通源码提交）
+/graphrag/.git/
+/graphiti/.git/
+
+# 桌面图谱数据（可能含用户本地产物）
+/graphrag_data/
+
+# 生成的报告/日志（可选，保留代码但忽略产物）
+/reports/__pycache__/

@@ -102,7 +102,6 @@
             <span v-if="!appending">＋ 添加文献</span>
             <span v-else>追加中…</span>
           </button>
-          <!-- 隐藏文件输入 -->
           <input
             ref="appendFileInput"
             type="file"
@@ -121,9 +120,22 @@
         </div>
       </div>
 
-      <!-- 追加进度提示 -->
-      <div v-if="appendStatus" class="append-status" :class="appendStatus.type">
-        {{ appendStatus.message }}
+      <!-- 追加进度面板 -->
+      <div v-if="appendStatus" class="append-progress-card" :class="appendStatus.type">
+        <div class="append-progress-header">
+          <span class="append-progress-icon">
+            <span v-if="appendStatus.type === 'info'" class="spinner-inline"></span>
+            <span v-else-if="appendStatus.type === 'success'">✓</span>
+            <span v-else>✕</span>
+          </span>
+          <span class="append-progress-msg">{{ appendStatus.message }}</span>
+        </div>
+        <div v-if="appendStatus.type === 'info' && appendPercent > 0" class="append-bar-wrap">
+          <div class="append-bar-track">
+            <div class="append-bar-fill" :style="{ width: appendPercent + '%' }"></div>
+          </div>
+          <span class="append-bar-pct">{{ appendPercent }}%</span>
+        </div>
       </div>
 
     </div>
@@ -147,6 +159,7 @@ const emit = defineEmits(['go-back', 'next-step', 'add-log', 'graph-updated'])
 const appendFileInput = ref(null)
 const appending = ref(false)
 const appendStatus = ref(null)
+const appendPercent = ref(0)
 
 function triggerAppend() {
   appendFileInput.value?.click()
@@ -156,7 +169,6 @@ async function onAppendFilesSelected(event) {
   const files = Array.from(event.target.files)
   if (!files.length) return
 
-  // 重置 input 以便下次可再次选同名文件
   event.target.value = ''
 
   if (!props.projectData?.project_id) {
@@ -165,6 +177,7 @@ async function onAppendFilesSelected(event) {
   }
 
   appending.value = true
+  appendPercent.value = 0
   appendStatus.value = { type: 'info', message: `正在上传 ${files.length} 个文件…` }
 
   try {
@@ -178,10 +191,9 @@ async function onAppendFilesSelected(event) {
 
     const taskId = res.data.task_id
     const fileNames = res.data.new_files?.join('、') || ''
-    appendStatus.value = { type: 'info', message: `文件已上传（${fileNames}），正在追加到图谱…` }
+    appendStatus.value = { type: 'info', message: `文件已上传（${fileNames}），正在索引到图谱…` }
     emit('add-log', `[追加文献] 任务已启动: ${taskId}`)
 
-    // 轮询任务进度
     await pollAppendTask(taskId)
 
   } catch (err) {
@@ -193,29 +205,34 @@ async function onAppendFilesSelected(event) {
 }
 
 async function pollAppendTask(taskId) {
-  const MAX_POLLS = 300  // 最多等 ~15 分钟（3秒/次）
-  for (let i = 0; i < MAX_POLLS; i++) {
-    await new Promise(r => setTimeout(r, 3000))
+  const POLL_INTERVAL = 2500
+  let consecutiveErrors = 0
+
+  while (true) {
+    await new Promise(r => setTimeout(r, POLL_INTERVAL))
     try {
       const res = await getTaskStatus(taskId)
       const task = res.data
-      if (!task) continue
+      if (!task) { consecutiveErrors++; continue }
 
+      consecutiveErrors = 0
       const progress = task.progress ?? 0
       const msg = task.message || ''
+      appendPercent.value = progress
 
       if (task.status === 'completed') {
         const nc = task.result?.node_count ?? task.result?.graph_info?.node_count ?? '—'
         const ec = task.result?.edge_count ?? task.result?.graph_info?.edge_count ?? '—'
-        const chunks = task.result?.chunks_appended ?? '—'
-        const nodesAdded = task.result?.nodes_added ?? 0
-        const edgesAdded = task.result?.edges_added ?? 0
+        const chunks = task.result?.new_chunks ?? task.result?.chunks_appended ?? '—'
+        const nodesAdded = task.result?.new_nodes ?? task.result?.nodes_added ?? 0
+        const edgesAdded = task.result?.new_edges ?? task.result?.edges_added ?? 0
+        appendPercent.value = 100
         appendStatus.value = {
           type: 'success',
-          message: `✓ 追加完成！新增 ${nodesAdded} 节点 / ${edgesAdded} 关系，图谱共 ${nc} 节点 / ${ec} 关系（处理了 ${chunks} 个文本块）`
+          message: `追加完成 — 新增 ${nodesAdded} 节点 / ${edgesAdded} 关系，图谱共 ${nc} 节点 / ${ec} 关系（${chunks} 个文本块）`
         }
         emit('add-log', `[追加文献] 完成: 新增节点=${nodesAdded}, 新增关系=${edgesAdded}, 总节点=${nc}`)
-        emit('graph-updated')   // 通知父组件刷新图谱数据
+        emit('graph-updated')
         return
       }
 
@@ -223,17 +240,21 @@ async function pollAppendTask(taskId) {
         throw new Error(task.error || task.message || '追加失败')
       }
 
-      appendStatus.value = { type: 'info', message: `追加进度 ${progress}%：${msg}` }
+      appendStatus.value = { type: 'info', message: msg || `索引中 ${progress}%` }
     } catch (err) {
       if (err.message.includes('追加失败') || err.message.includes('failed')) {
         appendStatus.value = { type: 'error', message: `追加失败：${err.message}` }
         emit('add-log', `[追加文献] 失败: ${err.message}`)
         return
       }
-      // 网络错误继续重试
+      consecutiveErrors++
+      if (consecutiveErrors > 20) {
+        appendStatus.value = { type: 'error', message: '无法连接后端，请检查服务是否正常运行' }
+        emit('add-log', '[追加文献] 轮询失败：连续多次无法获取任务状态')
+        return
+      }
     }
   }
-  appendStatus.value = { type: 'error', message: '追加超时，请检查后台日志' }
 }
 
 
@@ -293,14 +314,21 @@ const topNodes = computed(() => {
 })
 
 const TYPE_COLORS = {
-  Innovation: '#2563EB',
-  PriorArt: '#7C3AED',
-  Outcome: '#059669',
-  Person: '#D97706',
-  Organization: '#DC2626'
+  paper: '#2563EB',
+  method: '#7C3AED',
+  innovation: '#059669',
+  task: '#D97706',
+  dataset: '#0891B2',
+  metric: '#DC2626',
+  baseline: '#9333EA',
+  author: '#EA580C',
+  organization: '#4F46E5',
+  concept: '#0D9488',
+  variable: '#64748B',
+  parameter: '#78716C',
 }
 
-const typeColor = (type) => TYPE_COLORS[type] ?? '#6B7280'
+const typeColor = (type) => TYPE_COLORS[(type || '').toLowerCase()] ?? '#6B7280'
 const maxNodeCount = computed(() => nodeTypes.value[0]?.count || 1)
 const barWidth = (count) => Math.round((count / maxNodeCount.value) * 100)
 </script>
@@ -457,14 +485,82 @@ const barWidth = (count) => Math.round((count / maxNodeCount.value) * 100)
 }
 .btn-next:disabled { opacity: 0.35; cursor: not-allowed; }
 .btn-next:not(:disabled):hover { opacity: 0.85; }
-.append-status {
-  padding: 10px 16px;
-  border-radius: 8px;
+/* ── Append Progress Card ── */
+.append-progress-card {
+  padding: 16px 20px;
+  border-radius: 10px;
   font-size: 13px;
   line-height: 1.5;
-  margin-top: -8px;
 }
-.append-status.info  { background: #EFF6FF; color: #1D4ED8; border: 1px solid #BFDBFE; }
-.append-status.success { background: #D1FAE5; color: #065F46; border: 1px solid #6EE7B7; }
-.append-status.error { background: #FEF2F2; color: #991B1B; border: 1px solid #FECACA; }
+.append-progress-card.info {
+  background: #EFF6FF;
+  color: #1D4ED8;
+  border: 1px solid #BFDBFE;
+}
+.append-progress-card.success {
+  background: #D1FAE5;
+  color: #065F46;
+  border: 1px solid #6EE7B7;
+}
+.append-progress-card.error {
+  background: #FEF2F2;
+  color: #991B1B;
+  border: 1px solid #FECACA;
+}
+.append-progress-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.append-progress-icon {
+  flex-shrink: 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+.append-progress-msg {
+  flex: 1;
+  font-weight: 500;
+}
+.append-bar-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+.append-bar-track {
+  flex: 1;
+  height: 8px;
+  background: rgba(59, 130, 246, 0.15);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.append-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3B82F6, #60A5FA);
+  border-radius: 4px;
+  transition: width 0.6s ease;
+  min-width: 2px;
+}
+.append-bar-pct {
+  font-size: 12px;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', 'SF Mono', monospace;
+  color: #2563EB;
+  min-width: 36px;
+  text-align: right;
+}
+
+/* Inline spinner for append */
+.spinner-inline {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(59, 130, 246, 0.3);
+  border-top-color: #3B82F6;
+  border-radius: 50%;
+  animation: spin-inline 0.8s linear infinite;
+}
+@keyframes spin-inline {
+  to { transform: rotate(360deg); }
+}
 </style>

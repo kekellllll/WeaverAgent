@@ -18,6 +18,20 @@ if sys.platform == 'win32':
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# ── graphrag editable 安装兜底 ──────────────────────────────
+# uv/pip 创建的 editable .pth 文件在某些环境下（此 venv base 指向 anaconda 时）
+# 不会被 site.py 处理，导致 `import graphrag` 失败。这里显式把 monorepo
+# 下的 8 个源目录加入 sys.path，与 .pth 写入的路径完全一致。
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_GRAPHRAG_PKGS = [
+    "graphrag-common", "graphrag-cache", "graphrag-storage", "graphrag-input",
+    "graphrag-chunking", "graphrag-vectors", "graphrag-llm", "graphrag",
+]
+for _pkg in _GRAPHRAG_PKGS:
+    _p = os.path.join(_ROOT, "graphrag", "packages", _pkg)
+    if os.path.isdir(_p) and _p not in sys.path:
+        sys.path.insert(0, _p)
+
 from app import create_app
 from app.config import Config
 

@@ -47,6 +47,29 @@ else
   PYTHON="python"
 fi
 
+# ── 检查关键依赖 graphrag 是否可用（editable 安装偶尔失效，自动修复） ──
+if ! $PYTHON -c "import graphrag" 2>/dev/null; then
+  echo "${YELLOW}⚠ graphrag 模块不可用，正在自动修复 editable 安装...${NC}"
+  if command -v uv &>/dev/null; then
+    uv pip install --no-deps \
+      -e "$ROOT/graphrag/packages/graphrag-common" \
+      -e "$ROOT/graphrag/packages/graphrag-cache" \
+      -e "$ROOT/graphrag/packages/graphrag-storage" \
+      -e "$ROOT/graphrag/packages/graphrag-input" \
+      -e "$ROOT/graphrag/packages/graphrag-chunking" \
+      -e "$ROOT/graphrag/packages/graphrag-vectors" \
+      -e "$ROOT/graphrag/packages/graphrag-llm" \
+      -e "$ROOT/graphrag/packages/graphrag" 2>&1 | tail -3
+    if $PYTHON -c "import graphrag" 2>/dev/null; then
+      echo "${GREEN}  ✓ graphrag 已修复${NC}"
+    else
+      echo "${RED}  ✗ graphrag 修复失败，请手动检查 ../graphrag/packages/${NC}"
+    fi
+  else
+    echo "${RED}  ✗ 未找到 uv 命令，无法自动修复${NC}"
+  fi
+fi
+
 $PYTHON run.py > "$BACKEND/logs/backend.log" 2>&1 &
 BACKEND_PID=$!
 echo "${GREEN}  后端 PID: $BACKEND_PID${NC}"

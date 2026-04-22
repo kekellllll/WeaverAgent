@@ -32,8 +32,27 @@ class Config:
     LLM_BASE_URL = os.environ.get('LLM_BASE_URL', 'https://api.openai.com/v1')
     LLM_MODEL_NAME = os.environ.get('LLM_MODEL_NAME', 'gpt-4o-mini')
     
-    # Zep配置（GraphRAG 构建阶段使用）
-    ZEP_API_KEY = os.environ.get('ZEP_API_KEY')
+    # ==============================
+    # GraphRAG 配置（替代 Zep）
+    # ==============================
+    # 本地图谱数据存储目录
+    GRAPHRAG_DATA_DIR = os.environ.get(
+        'GRAPHRAG_DATA_DIR',
+        os.path.join(os.path.dirname(__file__), '../../../graphrag_data')
+    )
+
+    # 嵌入模型名称（用于 GraphRAG 向量索引）
+    # 如果 LLM 提供商支持嵌入，可以直接使用相同的 API
+    EMBEDDING_MODEL_NAME = os.environ.get('EMBEDDING_MODEL_NAME', 'text-embedding-3-small')
+
+    # Embedding API 独立配置（LLM 和 Embedding 可能来自不同供应商）
+    # 如 LLM 用 Moonshot Kimi，Embedding 用 DashScope text-embedding-v3
+    # 若未显式设置，则回退到与 LLM 相同的凭证
+    EMBEDDING_API_KEY = os.environ.get('EMBEDDING_API_KEY') or os.environ.get('LLM_API_KEY')
+    EMBEDDING_BASE_URL = os.environ.get('EMBEDDING_BASE_URL') or os.environ.get('LLM_BASE_URL', 'https://api.openai.com/v1')
+
+    # ZEP_API_KEY 保留（向后兼容，GraphRAG 不使用）
+    ZEP_API_KEY = os.environ.get('ZEP_API_KEY', '')
 
     # Neo4j 配置（本地图数据库，检索阶段使用）
     NEO4J_URI = os.environ.get('NEO4J_URI', 'bolt://localhost:7687')
@@ -56,11 +75,10 @@ class Config:
     
     @classmethod
     def validate(cls):
-        """验证必要配置"""
+        """验证必要配置（GraphRAG 版本：不再需要 ZEP_API_KEY）"""
         errors = []
         if not cls.LLM_API_KEY:
             errors.append("LLM_API_KEY 未配置")
-        if not cls.ZEP_API_KEY:
-            errors.append("ZEP_API_KEY 未配置")
+        # ZEP_API_KEY 已不再必须（GraphRAG 本地运行）
         return errors
 

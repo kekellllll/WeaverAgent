@@ -2,152 +2,282 @@
 
 <img src="./static/image/weaveragent_logo.svg" alt="WeaverAgent Logo" width="75%"/>
 
-A GraphRAG-Powered Academic Knowledge Graph Analysis Engine
+**A Microsoft-GraphRAG-Powered Academic Knowledge Graph Engine**
 </br>
-<em>基于 GraphRAG 的学术知识图谱分析引擎</em>
+<em>基于 Microsoft GraphRAG 的学术知识图谱分析引擎</em>
 
-[English](./README-EN.md) | [中文文档](./README.md)
+[English](./README-EN.md) | [中文文档](./README.md) | [Full Worklog](./reports/work.md)
+
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+![GraphRAG](https://img.shields.io/badge/Engine-Microsoft%20GraphRAG-purple)
+![Python](https://img.shields.io/badge/Python-3.11%2B-green)
+![Vue 3](https://img.shields.io/badge/Vue-3-4FC08D)
 
 </div>
 
 ## ⚡ Overview
 
-**WeaverAgent** is a GraphRAG-powered academic knowledge graph analysis engine. Upload PDF papers and the system automatically extracts entities and relationships to build an academic knowledge graph covering core dimensions such as methods, innovations, datasets, and metrics. Leveraging GraphRAG's multi-hop reasoning capabilities, it generates in-depth technical pathway analysis reports and supports natural language Q&A over graph entities.
+**WeaverAgent** is an academic knowledge-graph workbench. Drop in a batch of PDF / Markdown papers and the system will:
 
-> You only need to: Upload a batch of PDF papers and describe your analysis requirements in natural language</br>
-> WeaverAgent will return: A structured academic knowledge graph, a technical pathway analysis report, and an interactive Q&A system
+1. **Auto-design an ontology** — the LLM reads the papers and decides which entity types matter (Paper / Method / Dataset / Metric / Innovation / Task / Baseline / Author)
+2. **Build a GraphRAG index** — chunking, entity/relation extraction, Leiden community hierarchy, LLM-written community reports
+3. **Answer with a ReACT agent** — multi-tool retrieval with every fact automatically tagged by **source paper**
+4. **Generate provenance-grounded analysis reports** — no hallucinated citations
 
-### Core Capabilities
+> **In one sentence**: upload PDFs, ask questions, get answers that always tell you which paper each claim came from.
 
-- **Automatic Ontology Design**: LLM analyzes paper content and generates 8 core entity types (Paper, Method, Innovation, Task, Dataset, Metric, Baseline, Author) with their relationships
-- **GraphRAG Construction**: Builds high-quality knowledge graphs via Zep Cloud with multi-hop relationship reasoning
-- **Deep Analysis Reports**: ReportAgent autonomously searches the graph, reflects and reasons, generating structured technical pathway analysis reports
-- **Interactive Q&A**: Hybrid RAG combining graph and vector retrieval for precise answers to technical provenance questions
+### Key Features
+
+- 🧠 **Auto-designed ontology** — no pre-defined schema, the LLM figures out what to extract
+- 🏗️ **Full local GraphRAG** — Microsoft's GraphRAG runs entirely on your machine; all outputs are portable Parquet files
+- 📎 **Source-paper traceability** — every fact ships with `【Source: <paper title>】`, no fabrication
+- 🔄 **Multi-tool ReACT** — `quick_search` / `panorama_search` / `insight_forge` / `deep_entity_query` picked by intent
+- 🛡️ **Anti-"stalling" guard** — detects and retries when the LLM promises to search but forgets to emit a tool call
+- 🌐 **Multi-provider LLM** — GPT-5 / GPT-4o / GLM / Qwen / Kimi via any OpenAI-SDK-compatible endpoint
+- 💰 **Token & cost reporting** — built-in scripts summarise how much each graph cost to build
 
 ## 🔄 Workflow
 
-1. **Graph Building**: PDF parsing → text extraction → LLM ontology generation → Zep GraphRAG construction
-2. **Environment Setup**: Entity-relationship visualization → graph statistics → analysis parameter configuration
-3. **Graph Analysis**: Node/edge type distribution → hub node identification → technical pathway analysis
-4. **Report Generation**: ReportAgent multi-round graph retrieval → ReACT reasoning → section-by-section report generation
-5. **Deep Interaction**: Chat with ReportAgent → graph entity Q&A → RAG paragraph retrieval
+Five-step UI wizard (`Step1GraphBuild.vue` … `Step5Interaction.vue`):
+
+1. **Graph Build** — Upload PDFs → LLM generates ontology → GraphRAG indexing → Parquet + LanceDB
+2. **Environment Setup** — Inspect entities/relations → graph statistics → tune analysis parameters
+3. **Graph Analysis** — Node-type distribution → hub detection → technical-pathway extraction
+4. **Report Generation** — ReportAgent runs multi-round ReACT → section-by-section report → export Markdown/PDF
+5. **Deep Interaction** — Chat in natural language → agent picks tools → answers cite paper sources
+
+Full architecture diagrams in [`reports/work.md`](./reports/work.md).
 
 ## 🚀 Quick Start
 
-### Option 1: Source Code Deployment (Recommended)
+### Prerequisites
 
-#### Prerequisites
+| Tool | Version | Purpose | Check |
+|------|---------|---------|-------|
+| **Node.js** | ≥ 18 | frontend runtime | `node -v` |
+| **Python** | 3.11 – 3.12 | backend runtime | `python --version` |
+| **uv** | latest | Python package manager | `uv --version` |
 
-| Tool | Version | Description | Check Installation |
-|------|---------|-------------|-------------------|
-| **Node.js** | 18+ | Frontend runtime, includes npm | `node -v` |
-| **Python** | ≥3.11, ≤3.12 | Backend runtime | `python --version` |
-| **uv** | Latest | Python package manager | `uv --version` |
-
-#### 1. Configure Environment Variables
+### 1. Configure environment variables
 
 ```bash
-# Copy the example configuration file
 cp .env.example .env
-
-# Edit the .env file and fill in the required API keys
+# edit .env, fill in your LLM API key
 ```
 
-**Required Environment Variables:**
+#### Required
 
 ```env
-# LLM API Configuration (supports any LLM API with OpenAI SDK format)
-# Recommended: Alibaba Qwen-plus model via Bailian Platform: https://bailian.console.aliyun.com/
-LLM_API_KEY=your_api_key
-LLM_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
-LLM_MODEL_NAME=qwen-plus
-
-# Zep Cloud Configuration (required for GraphRAG construction)
-# Free monthly quota is sufficient for simple usage: https://app.getzep.com/
-ZEP_API_KEY=your_zep_api_key
+# Any OpenAI-SDK-compatible LLM endpoint
+LLM_API_KEY=sk-xxx
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_MODEL_NAME=gpt-5-mini
 ```
 
-**Optional Environment Variables:**
+#### Recommended: independent Embedding config
 
 ```env
-# Neo4j Configuration (local graph database for advanced retrieval scenarios)
-NEO4J_URI=bolt://localhost:7687
-NEO4J_USER=neo4j
-NEO4J_PASSWORD=your_password
+EMBEDDING_API_KEY=sk-xxx                         # falls back to LLM_API_KEY if unset
+EMBEDDING_BASE_URL=https://api.openai.com/v1
+EMBEDDING_MODEL_NAME=text-embedding-3-large      # 3072-dim, recommended
+```
 
-# Report Agent Configuration
-REPORT_AGENT_MAX_TOOL_CALLS=5
+#### Optional
+
+```env
+GRAPHRAG_DATA_DIR=/path/to/graphrag_data         # default: ../graphrag_data
+
+REPORT_AGENT_MAX_TOOL_CALLS=5                    # per-turn tool-call budget
 REPORT_AGENT_MAX_REFLECTION_ROUNDS=2
 REPORT_AGENT_TEMPERATURE=0.5
 ```
 
-#### 2. Install Dependencies
+#### Model selection cheat-sheet
+
+| Scenario | Recommended | Rationale |
+|---|---|---|
+| Large-batch indexing (≥ 30 papers) | `gpt-4o-mini` + `text-embedding-3-small` | ~¥0.08 per paper |
+| Small batch, highest quality | `gpt-5` + `text-embedding-3-large` (3072d) | Richer community reports, better recall |
+| Chinese compliance / cost-sensitive | `glm-5-turbo` + `embedding-3` | Data stays in China (`thinking=disabled`) |
+| Very long documents | `kimi-k2-turbo-preview` | 128K context |
+| **Avoid** for bulk indexing | `gpt-4o` | 16.7× the price of mini, no proportional gain |
+
+Full cost comparison (11 real builds) in [`reports/work.md §5`](./reports/work.md#5-graphrag-多模型构建成本对比).
+
+### 2. Install dependencies
 
 ```bash
-# One-click installation of all dependencies (root + frontend + backend)
+# one-shot (recommended)
 npm run setup:all
+
+# or step by step
+npm run setup          # Node parts (root + frontend)
+npm run setup:backend  # Python parts (uv sync, auto-creates .venv)
 ```
 
-Or install step by step:
+> ⚠️ The repo vendors the Microsoft GraphRAG monorepo in `graphrag/packages/` and installs it as an editable package. If the backend reports `ModuleNotFoundError: graphrag`, `start.sh` will auto-repair the editable install.
+
+### 3. Start services
 
 ```bash
-# Install Node dependencies (root + frontend)
-npm run setup
-
-# Install Python dependencies (backend, auto-creates virtual environment)
-npm run setup:backend
-```
-
-#### 3. Start Services
-
-```bash
-# Start both frontend and backend (run from project root)
+# launch both frontend and backend
 npm run dev
+
+# or use the shell helpers (background + auto-restart)
+./start.sh
+./stop.sh
 ```
 
-**Service URLs:**
-- Frontend: `http://localhost:3000`
-- Backend API: `http://localhost:5001`
+**URLs**:
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:5001
 
-**Start Individually:**
+Start individually:
 
 ```bash
-npm run backend   # Start backend only
-npm run frontend  # Start frontend only
+npm run backend   # backend only
+npm run frontend  # frontend only
 ```
 
-**Shell Script:**
+### 4. Docker
 
 ```bash
-./start.sh   # One-click start
-./stop.sh    # One-click stop
-```
-
-### Option 2: Docker Deployment
-
-```bash
-# 1. Configure environment variables (same as source deployment)
 cp .env.example .env
-
-# 2. Pull image and start
 docker compose up -d
 ```
 
-Reads `.env` from root directory by default, maps ports `3000 (frontend) / 5001 (backend)`
-
-> Mirror address for faster pulling is provided as comments in `docker-compose.yml`, replace if needed.
+Maps ports `3000` (frontend) / `5001` (backend), auto-loads root `.env`.
 
 ## 🏗️ Tech Stack
 
 | Layer | Stack |
 |-------|-------|
-| Frontend | Vue 3 + Vue Router 4 + Vite + D3.js (graph visualization) |
+| Frontend | Vue 3 + Vue Router 4 + Vite + D3.js (graph visualisation) |
 | Backend | Flask 3 + Flask-CORS |
-| Graph Engine | Zep Cloud (GraphRAG) + Neo4j (optional local graph DB) |
-| LLM | OpenAI SDK format (compatible with Qwen, GPT, Claude, etc.) |
-| Vector Retrieval | ChromaDB (RAG paragraph retrieval) |
-| File Processing | PyMuPDF (PDF parsing) + charset-normalizer |
+| **Graph engine** | **Microsoft GraphRAG** (vendored monorepo, runs locally) |
+| Vector store | LanceDB (GraphRAG native) + optional ChromaDB (paragraph RAG) |
+| LLM | OpenAI-SDK-compatible (GPT-5 reasoning / GLM / Qwen / Kimi / GPT-4o …) |
+| Embedding | `text-embedding-3-large` (3072d) / `text-embedding-3-small` / `embedding-3` / … |
+| Storage | **Local filesystem** (Parquet + LanceDB + JSON), shippable via `tar` |
+| File parsing | PyMuPDF (PDF) + charset-normalizer |
+| Optional graph DB | Neo4j (reserved for future graph algorithms) |
 
-## 📄 Acknowledgments
+### Data flow
 
-**WeaverAgent has received strategic support and incubation from Shanda Group!**
+```
+PDF/MD → TextProcessor → OntologyGenerator (LLM)
+                            ↓
+                       GraphBuilderService (GraphRAG)
+                            ↓
+            ┌───────────────┴───────────────┐
+            ▼                                ▼
+   output/*.parquet                     lancedb/
+   (nodes, edges, communities)       (entity embeddings)
+            │                                │
+            └─────────┬──────────────────────┘
+                      ▼
+            GraphRAGToolsService
+            (quick / panorama / insight_forge / deep_entity)
+                      ▼
+               ReportAgent (ReACT)
+                      ▼
+          answer + 📚 Top-5 references + 🧭 source paper
+```
+
+## 🔑 Feature Highlights
+
+### Source-paper traceability (added 2026-04)
+
+Every retrieved fact is automatically tagged with the paper title it came from:
+
+```
+TURBOQUANT → RABITQ: Consistently outperforms RabitQ in recall ratio across experiments
+【Source: TurboQuant: Online Vector Quantization with Near-optimal Distortion Rate】
+```
+
+In the final answer, the LLM is forced to move `【Source: …】` into each reference's `*(source: …)*` slot — and **explicitly forbidden** from making up titles.
+
+**How it works**: `entity.text_unit_ids → text_units.document_id → documents.text → first markdown H1` = real title. See `backend/app/services/graphrag_tools.py::_build_paper_source_map`.
+
+### Multi-tool ReACT strategy
+
+```python
+# Automatically picked from the question
+"What is X?"                →  quick_search
+"Compare A vs B"            →  quick_search(A) + quick_search(B) + quick_search("A B outperforms")
+"Give me a landscape view"  →  panorama_search       (calls global_search + community reports)
+"Deep-dive on X"            →  insight_forge         (calls local_search + vector retrieval)
+"List every Dataset"        →  deep_entity_query(entity_type="Dataset")
+```
+
+For comparison questions, the prompt **enforces at least 3 distinct tool calls** to avoid the agent settling for only 2.
+
+### Anti-stalling
+
+Detects 10+ stalling phrases ("please wait", "let me search", "我将检索", "稍等" …). If the agent uses one but forgot to emit a `<tool_call>`, it is re-prompted with a hard "either emit a tool call now, or give the complete final answer".
+
+### Multi-provider LLM wrapper
+
+`llm_client.py` auto-handles provider quirks:
+
+| Family | Auto-applied |
+|---|---|
+| GPT-5 | `max_completion_tokens` + `reasoning_effort=low` (chat) / `minimal` (indexing) |
+| GLM reasoning | `thinking.type=disabled` |
+| Qwen3 | `enable_thinking=false` |
+| Kimi | Concurrency throttled to 3 RPS |
+
+## 📦 Data Sharing
+
+Everything is a local Parquet file, so sharing is just `tar`:
+
+```bash
+# Recommended: full graph, ~10–20 MB
+tar --exclude='cache' --exclude='reporting' \
+    -czf share.tgz graphrag_data/weaveragent_<id>/
+
+# Minimal: browsable + keyword-searchable only, ~2 MB
+tar -czf minimal.tgz \
+    graphrag_data/weaveragent_<id>/output/ \
+    graphrag_data/weaveragent_<id>/{meta,ontology}.json
+```
+
+The receiver unpacks into their own `graphrag_data/` and is ready to query. Full details in [`reports/work.md §6`](./reports/work.md#6-数据存储与共享).
+
+## 📊 Cost Reporting
+
+Scan all builds and generate a report:
+
+```bash
+# Markdown
+python reports/gen_markdown.py
+
+# PDF (requires xelatex)
+python reports/gen_latex.py && cd reports && xelatex graphrag_cost_report.tex
+```
+
+Per-graph breakdown:
+
+```bash
+python backend/scripts/token_usage.py /path/to/graphrag_data/weaveragent_xxxxx
+```
+
+## 📖 Documentation
+
+| Doc | Content |
+|---|---|
+| [reports/work.md](./reports/work.md) | Full worklog: architecture, cost report (11 builds), roadmap |
+| [reports/graphrag_cost_report.pdf](./reports/graphrag_cost_report.pdf) | Authoritative cost comparison across 7 LLMs (PDF) |
+| [.env.example](./.env.example) | Environment variable template |
+| [start.sh](./start.sh) / [stop.sh](./stop.sh) | One-click start / stop scripts |
+
+## 📄 Acknowledgements
+
+**Standing on the shoulders of giants**:
+- [Microsoft GraphRAG](https://github.com/microsoft/graphrag) — graph construction & retrieval core
+- [Graphiti](https://github.com/getzep/graphiti) — early ontology-design inspiration
+- [MiroFish](https://github.com/mirofish) — frontend interaction reference
+
+## 📄 License
+
+AGPL-3.0 — free to use, modify, and redistribute; derivative network services must release their source.
